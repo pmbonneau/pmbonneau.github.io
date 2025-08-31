@@ -1,0 +1,50 @@
+{
+	"photo" : "resources/photo.jpg",
+	"posts" : [
+		{
+			"title" : "iOS Multiboot",
+			"date" : "19.10.19",
+			"desc" : "An iOS multiboot writeup covering untethered nand_firmware flash boot method.",
+			"picture" : "resources/dualboot.jpg",
+			"link" : "multiboot"
+		},
+		{
+			"title" : "iOS 5.x iBoot HFS+ heap buffer overflow",
+			"date" : "04.06.20",
+			"desc" : "From a filesystem driver bug to unsigned code execution. A writeup about HFS+ header catalog.extents[1].blockcount on iBoot-1219.x and lower.",
+			"picture" : "resources/ios5-iboot-hfs-hbo.jpg",
+			"link" : "ios5-iboot-hfs-hbo"
+		},
+		{
+			"title" : "Installation de Windows sur un disque amovible",
+			"date" : "13.01.22",
+			"desc" : "Un guide complet sur comment faire une installation amorçable d'un système «Windows to Go».",
+			"picture" : "resources/windows-to-go.jpg",
+			"link" : "windows-to-go"
+		},
+		{
+            "title" : "De Rebus Antiquis",
+            "date" : "03.05.24",
+            "desc" : "Exploiting the old iOS 7.x bootchain. A complementary writeup about Xerub's recursive stack overflow bug in iBoot-1940.x and lower.",
+            "picture" : "resources/de-rebus-antiquis.jpg",
+            "link" : "de-rebus-antiquis"
+        }
+	],
+	"threads" : [
+		{
+			"title" : "iOS 5.x iBoot HFS+ Heap Buffer Overflow",
+			"date" : "16.12.18",
+			"embedded" : "<blockquote class=\"twitter-tweet\" data-lang=\"en\"><p lang=\"en\" dir=\"ltr\">Upgraded my iPad 2nd to iOS 7.1.2 (11D257) exploiting <a href=\"https://twitter.com/p0sixninja?ref_src=twsrc%5Etfw\">@p0sixninja</a>&#39;s iOS 5.x iBoot HFS heap buffer overflow. With this, featuring custom logo &amp; verbose boot! 😬 <a href=\"https://t.co/LGheCxIMm8\">pic.twitter.com/LGheCxIMm8</a></p>&mdash; Pierre-Marc Bonneau (@ShadowLee19) <a href=\"https://twitter.com/ShadowLee19/status/1074533504610918400?ref_src=twsrc%5Etfw\">17 décembre 2018</a></blockquote>"
+		},
+		{
+			"title" : "De Rebus Antiquis",
+			"date" : "12.11.18",
+			"embedded" : "<blockquote class=\"twitter-tweet\" data-lang=\"en\"><p lang=\"en\" dir=\"ltr\">Untethered <a href=\"https://twitter.com/hashtag/derebusantiquis?src=hash&amp;ref_src=twsrc%5Etfw\">#derebusantiquis</a> boot iOS 6.0 (10A405) on iPhone 5. Much love to <a href=\"https://twitter.com/xerub?ref_src=twsrc%5Etfw\">@xerub</a> for the exploit (as well as that awesome name for it!) and @dora_iOS for untether patches. <a href=\"https://t.co/PjWHCuzFTL\">pic.twitter.com/PjWHCuzFTL</a></p>&mdash; Pierre-Marc Bonneau (@ShadowLee19) <a href=\"https://twitter.com/ShadowLee19/status/1062222111903809536?ref_src=twsrc%5Etfw\">13 novembre 2018</a></blockquote>"
+		},
+		{
+			"title" : "Accessing AES Crypto Engine",
+			"date" : "14.09.18",
+			"embedded" : "<blockquote class=\"twitter-tweet\" data-lang=\"en\"><p lang=\"en\" dir=\"ltr\">Accessing AES crypto engine to use A6 GID key <a href=\"https://twitter.com/hashtag/derebusantiquis?src=hash&amp;ref_src=twsrc%5Etfw\">#derebusantiquis</a>. <a href=\"https://t.co/o0DznFudI7\">pic.twitter.com/o0DznFudI7</a></p>&mdash; Pierre-Marc Bonneau (@ShadowLee19) <a href=\"https://twitter.com/ShadowLee19/status/1040760471576563713?ref_src=twsrc%5Etfw\">15 septembre 2018</a></blockquote>"
+		}
+	]
+}

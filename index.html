@@ -1,12 +1,64 @@
 <html>
 	<head>
 		<link rel="icon" href="apple-touch-icon.png">
+		<link rel="stylesheet" type="text/css" href="new-common/general.css">
+		<link rel="stylesheet" type="text/css" href="new-common/main-page.css">
+
+		<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1"> 
+		<meta charset="UTF-8">
+
+		<script type="text/javascript" src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+		<script type="text/javascript" src="js/3rd-party/mustache.min.js"></script>
+		<script type="text/javascript" src="js/index.js"></script>
+
 		<title>Pierre-Marc Bonneau's blog</title>
 	</head>
 	
-	<body>
-		<h1>Welcome!</h1>
-		<p>My personal website https://www.pmbonneau.com is currently moving here on GitHub pages.</p>
-	</body>
+	<body onload="main()">
+		<div id="main" class="main" hidden>
+			<div class="text">
+				<center>
+					<img id="photo" class="align avatar">
+					<h1 id="name">Pierre-Marc Bonneau</h1>
+					<div class="desc">pmbonneau</div>
 
+					<div class="p">
+						I am Pierre-Marc Bonneau, 30 years old, graduated in computer science at University Laval (Québec, Canada). Interested in Apple's products low-level (iBoot and friends) environment security. 
+					</div>
+
+					<div class="p">
+						The main purpose of this blog is to share my knowledge about this obscure world of Apple with the community.
+						It includes writeups, tutorials, analysis, hacking methods, useful resources and much more.
+					</div>
+				</center>
+
+				<div id="tabs" class="tab-controller">
+					<div id="articles-tab" class="tab" inited=0>
+						Articles
+					</div>
+					
+					<div id="threads-tab" class="tab" inited=0>
+						Tweets
+					</div>
+				</div>
+
+				<div class="tabs-content">
+					<div id="articles-tab-contents" hidden>
+					</div>
+					
+					<div id="threads-tab-contents" hidden>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div id="error" class="main" hidden>
+			<div class="text">
+				<center>
+					<h1>Error occured!</h1>
+					Internal error occured, please contact @shadowlee19
+				</center>
+			</div>
+		</div>
+	</body>
 </html>
