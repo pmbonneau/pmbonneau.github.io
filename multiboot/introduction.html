@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS Multiboot - Introduction</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Introduction</h1>
+<p align="justify">
+This part describes steps to do on device's flashed low-level bootchain in order to implement an untethered multi-boot of multiple iOS
+operating systems installed on the device.
+<br></br>
+In a tethered bootchain, each component are usually sent from USB. The only exception is when using <span class="cli">boot-command=upgrade</span>, which 
+allows getting boot images (DeviceTree, Ramdisk, Kernelcache) from filesystem.
+<br></br>
+When booting from USB, no file system are mounted until the kernel does boot. An external computer connected to the iOS device using an USB cable is needed in order to 
+send boot images and run commands. Apple bootloaders involved are SecureROM (hardware DFU mode) as level 0, iBSS as first stage bootloader and iBEC as secondary stage bootloader.
+<br></br>
+Each bootloader in the DFU bootchain is waiting for an image to be uploaded and executed (usually next stage bootloader) from USB.
+For example, device is placed in hardware DFU mode, it will waits for a first stage bootloader (iBSS or LLB) to be uploaded from USB before run it.
+Then, iBSS will waits for an iBEC image to be uploaded from USB before run it.
+<br></br>
+In the normal mode bootchain that we will see in detail in this writeup part, each component implied in the boot process are flashed into some partitions on the NAND disk.
+These firmware partitions are hidden on 32-bit devices, but mapped on 64-bit devices as rdisk1 (nand_llb) and rdisk2 (nand_firmware).
+<br></br>
+The bootloaders concerned in the normal boot process are SecureROM (normal mode) as level 0, LLB as first stage bootloader and iBoot as secondary stage bootloader.
+Both bootloader types (normal mode and DFU) are very similar in terms of functionalities, except normal mode ones search for image3 type tag in the NAND firmware partition.
+<br></br>
+When the power button is pressed on the device, the SecureMode runs normal mode code if no other buttons are pressed. The normal mode code instructs the
+device to search for an image (img3) with type <span class="cli">illb</span> in the nand_llb partition on the NAND disk, then jumps to it. Once executed, LLB will look in the nand_firmware partition for an image type <span class="cli">ibot</span> and jumps to it.
+If no image type <span class="cli">ibot</span> is found, LLB instructs itself to wait for an USB image. This is an iBSS-similar Soft-DFU mode. Finally, iBoot will look in nand_firmware for images type <span class="cli">dtre</span> (DeviceTree), <span class="cli">logo</span> (Applelogo), <span class="cli">recm</span> (Recoverylogo) and mount the NAND filesystem to
+find the kernelcache image.
+<br></br>
+The kernelcache image (named "kernelcache") is stored compressed in <span class="cli">/System/Library/Caches/com.apple.kernelcaches/kernelcache</span> on the boot-partition. There is a function in iBoot which is responsible to mount the boot-partition file system, find the kernel image, verify it, uncompress it then finally execute it.
+<br></br>
+In this writeup, we will use the normal bootchain boot images (LLB and iBoot) in order to implement an untethered multi-boot.
+<br></br>
+There is also other existing methods to untether an iOS multi-boot, such as CoolBooter's one (which uses iBEC's "upgrade" routine to get other boot images from file system).
+In the past, I also heard about another method which mostly consisted of encapsulating boot images into themselves. I never succeded with this method.
+<br></br>
+For this writeup, we will do an iOS 7.1.2 with iOS 6.1.3 and iOS 5.1.1 untethered triple-boot on iPhone 4 (iPhone 3,1 - N90AP). The primary, signed iOS instance is 7.1.2 (11D257) and the secondary, unsigned iOS instances will be iOS 6.1.3 (10B329) and iOS 5.1.1 (9B208). 
+</p>
+<br></br>
+<center><a href="download_firmwares.html" class="menu"><b>> Part 1:</b> Download iOS firmwares</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2019 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

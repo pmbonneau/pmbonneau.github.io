@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS Multiboot - Completing Installation</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Completing installation</h1>
+<b>Modify secondary systems fstab</b><br></br>
+Default iOS fstab looks like this.
+<p class="cli">
+/dev/disk0s1s1 / hfs ro 0 1
+<br></br>
+/dev/disk0s1s2 /private/var hfs,nosuid,nodev rw 0 2
+</p>
+First line does mount <span class="cli">/dev/disk0s1s1</span> to <span class="cli">/</span> using HFS filesystem read-only mode.
+<br></br>
+Second line does mount <span class="cli">/dev/disk0s1s2</span> to <span class="cli">/private/var/</span> using HFS filesystem read-write mode.
+<p align="justify"> 
+In the iOS low-level bootchain, iBoot passes boot-args to kernel when jumping to it. There's one boot argument called <span class="cli">rd</span> which tells the kernel (PID0) on which partition launchd (PID1) is. The kernel will look for fstab, then proper partitions will be mounted according to options set in this file.
+</p>
+We need to instruct the kernel to boot the right iOS system. To do this, we modify fstab as follow where X represents the partition number.<br></br>
+<p class="cli">
+/dev/disk0s1s[X] / hfs ro 0 1
+<br></br>
+/dev/disk0s1s[X] /private/var hfs rw 0 2
+</p>
+For our iOS 6.1.3 installation, system partition is on <span class="cli">/dev/disk0s1s3</span> and user data partition is on <span class="cli">/dev/disk0s1s4</span>. Use nano editor to edit the fstab this way.
+<p class="cli">iphone4-n90ap#nano /SystemB/etc/fstab</p>
+<p class="cli"> 
+/dev/disk0s1s3 / hfs ro 0 1
+<br></br>
+/dev/disk0s1s4 /private/var hfs rw 0 2
+</p>
+<img class="align" src="resources/completing_installation-edit_fstab_second_os.png">
+For iOS 5.1.1, our system partition is on <span class="cli">/dev/disk0s1s5</span> and user data partition is on <span class="cli">/dev/disk0s1s6</span>.
+<p class="cli">iphone4-n90ap#nano /SystemC/etc/fstab</p>
+<p class="cli">
+/dev/disk0s1s5 / hfs ro 0 1
+<br></br>
+/dev/disk0s1s6 /private/var hfs rw 0 2
+</p> 
+<br></br>
+<b>Install kernelcache</b>
+<p align="justify"> 
+In iBoot, there are routines dedicated to mount the root device (set by <span class="cli">rd</span> boot-arg) and search for a kernelcache in <span class="cli">/System/Library/Caches/com.apple.kernelcaches/kernelcach[x]</span>.
+By default, kernelcache file path is <span class="cli">/System/Library/Caches/com.apple.kernelcaches/kernelcache</span>. We patched the path in iBoot to search for a different kernelcache image than the main iOS one (which would not be able to boot because of encryption).
+Using SCP, upload your decrypted kernelcache (named <span class="cli">kernelcach[x]</span>, where x corresponds to the secondary iOS identifier) to <span class="cli">/System/Library/Caches/com.apple.kernelcaches/</span>.
+You should have two or more kernelcache files in this directory.
+</p>
+<br></br>
+<b>Configure system keybags</b>
+<p align="justify">
+System keybag on iOS is usually easy to deal with when there is a single operating system installed on the device. It gets created during the restore process and updated when certain data-protection operations such as changing passcode are performed.
+If you manually install iOS from a low-level exploit, you could directly run mksysbag (program that calls <span class="cli">MobileKeyBag.framework</span>) from the ramdisk. A new system keybag will be created with its decryption IV + Key stored in the effaceable storage.
+There's only one effaceable storage on a device, so it gets shared along all iOS versions installed in a multiboot setup. This complicates things a lot, because new created system keybags will always update effaceable storage by wiping previous system keybag decryption keys.
+A workaround we previously did for this issue was to add <span class="cli">no-effaceable-storage</span> property to DeviceTree, which tells the keybagd to use a fake key instead of effaceable-storage when creating a new system keybag.
+<br></br>
+Now, we have to create new system keybags for our secondary iOS versions. The system keybag is stored on user data partition, <span class="cli">/private/var/keybags/systembag.kb</span> (from booted environment) or <span class="cli">/DataB/keybags/systembag.kb</span> (when mounted).
+Install the package <span class="cli">mksysbag</span> from my Cydia repository. It will be installed in <span class="cli">/usr/bin/</span> on the main iOS. Copy mksysbag to any secondary iOS that supports <span class="cli">no-effaceable storage</span>. In our case, only iOS 6.1.3 does. For 5.1.1, we can't use this method, we will do another workaround instead.
+</p>
+<p class="cli">iphone-n90ap#cp -p /usr/bin/mksysbag /SystemB/usr/bin/</p>
+<img class="align" src="resources/completing_installation-mksysbag_copy.png">
+We need to make mksysbag to run at the secondary OS first boot, before keybagd tries to read the system keybag. For this, we will setup launchd.conf to run scripts and programs at boot.
+<p class="cli">iphone-n90ap#nano /SystemB/etc/launchd.conf</p>
+<p class="cli"> 
+bsexec .. /usr/bin/mksysbag
+</p>
+Save the new file. We don't set <span class="cli">SystemB</span> in our path, because it will becomes <span class="cli">/</span> when the OS is booted.
+ 
+Create <span class="cli">keybags</span> directory at the root of user data partition for each secondary iOS systems.
+<p class="cli">iphone-n90ap#mkdir /DataB/keybags/</p>
+<p class="cli">iphone-n90ap#mkdir /DataC/keybags/</p>
+ 
+<br></br>
+<b>Setup LLB images for kloader</b>
+<br></br>
+If you haven't already did it, create a directory named <span class="cli">bootloaders</span> at root of your main iOS system partition.
+<p class="cli">iphone-n90ap#mkdir /bootloaders</p>
+Using SCP, transfert the patched LLB images to /bootloaders on the device. Be sure that the LLB images are a RAW ARM binary image, not packed into a .img3 container because kloader will try to run the img3 header as code. This might cause unexpected behaviour.
+<p class="cli">pmbonneau-mac#scp -P 2022 LLBB.n90ap.bin root@localhost:/bootloaders</p>
+<p class="cli">pmbonneau-mac#scp -P 2022 LLBC.n90ap.bin root@localhost:/bootloaders</p>
+<img class="align" src="resources/preparing_main_ios-jailbreak_ssh_transfert_llbb.png">
+
+Launch kloader with the patched LLB image.
+<br></br>
+To boot iOS 6.1.3 :<br></br>
+<p class="cli">iphone-n90ap#kloader6 /bootloaders/LLBB.n90ap.bin</p>
+<img class="align" src="resources/preparing_main_ios-kloader_llbb.png">
+To boot iOS 5.1.1 :<br></br>
+<p class="cli">iphone-n90ap#kloader6 /bootloaders/LLBC.n90ap.bin</p>
+<img class="align" src="resources/completing_installation-kloader_llbc.png">
+Press home or power button to boot the patched LLB image. It should jump to the patched iBoot (screen light-up), display bootlogo, then boot the kernel.
+<br><br>
+<center></center><br>
+</div>
+
+<footer>
+	Copyright © 2019 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

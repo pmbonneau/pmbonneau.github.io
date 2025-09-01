@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS Multiboot - Patch DeviceTree</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Patch DeviceTree</h1>
+
+<p align="justify">
+First, read the decrypted secondary iOS devicetree using imagine to see if it is properly decrypted and not corrupted.
+</p>
+<p class="cli">pmbonneau-mac#imagine -d DeviceTree.n90ap_dec.bin</p>
+<p align="justify">
+The tool should print all nodes without returning any error messages.
+Now, we need to add the <span class="cli">no-effaceable-storage</span> node to the <span class="cli">default</span> parent node.
+Using a hex editor, open DeviceTree.n90ap_dec.bin then search for the string "firmware-min". This should brings you to the node <span class="cli">firmware-min-capacity</span>.
+<img class="align" src="resources/patch_devicetree-hexedit_search_firmware_min_cap.png">
+You know that you found the right node if there is "platform-name" near of it. Copy the node data to clipboard.
+<img class="align" src="resources/patch_devicetree-hexedit_search_firmware_min_cap_copy.png">
+Search for the node <span class="cli">use-lwvm</span>.
+<img class="align" src="resources/patch_devicetree-hexedit_search_use_lwvm.png">
+Now *insert* the copied <span class="cli">firmware-min-capacity</span> node data like this screenshot.
+<br></br>
+<img class="align" src="resources/patch_devicetree-hexedit_insert_mode.png">
+<br></br>
+<br></br>
+Be sure that the cursor is before the "u" of <span class="cli">use-lwvm</span> before paste data.
+<br></br>
+<img class="align" src="resources/patch_devicetree-hexedit_use_lwvm_cursor.png">
+<br></br>
+Paste from the clipboard, the node data copied previously.
+<img class="align" src="resources/patch_devicetree-hexedit_paste_firmware_min_cap.png">
+Rename the node name attribute <span class="cli">firmware-min-capacity</span> to <span class="cli">no-effaceable-storage</span>.
+<br></br>
+<img class="align" src="resources/patch_devicetree-hexedit_overwrite_mode.png">
+<br></br>
+<img class="align" src="resources/patch_devicetree-hexedit_rename_firmware_min_cap.png">
+Now the most complicated part of that devicetree patch, increasing the child node count. Each node of the devicetree holds a count of its child nodes. We must update this count value on the parent node since we added one child node. If we don't update this value, devicetree parsers won't work properly as they expect a node with <span class="cli">n</span> child.
+This value should be near of the first child node, as the count value is stored on the parent node which is right before it in the devicetree image.
+For example, for the "default" node, the count value should be somewhat between the string <span class="cli">backlight</span> and <span class="cli">AAPL,phandle</span>. In this case, the child count value of the node <span class="cli">default</span> is <span class="cli">0x07</span>.
+<img class="align" src="resources/patch_devicetree-hexedit_default_node_count.png">
+Patch it to <span class="cli">0x08</span> since we attached one additional node to this parent then save the modifications.
+Check the patched devicetree using <span class="cli">imagine</span>.
+<p class="cli">pmbonneau-mac#imagine -d DeviceTree.n90ap_dec.bin</p>
+<p align="justify">
+The tool should print all nodes without returning any error messages, and check if <span class="cli">no-effaceable-storage</span> is there.
+<img class="align" src="resources/patch_devicetree-imagine_parse_1.png">
+<img class="align" src="resources/patch_devicetree-imagine_parse_2.png">
+If everything is okay, repack the devicetree into an img3 container.
+<p class="cli">pmbonneau-mac#xpwntools DeviceTree.n90ap_dec.bin DeviceTree.n90ap_patched.img3 -t DeviceTree.n90ap.img3</p>
+<img class="align" src="resources/patch_devicetree-xpwntools_repack_img3.png">
+Rename the patched devicetree image DeviceTree.n90ap_patched.img3 to DeviceTreeB.[...].img3 and place it into the "Patched" folder created at the beginning.
+</p>
+
+<center><a href="flash_nand_firmware.html" class="menu"><b>> Part 8:</b> Flash nand_firmware</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2019 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

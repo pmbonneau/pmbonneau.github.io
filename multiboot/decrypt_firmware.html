@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS Multiboot - Decrypt firmware images</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Decrypt firmware images</h1>
+
+Download Odysseus v0.999 from https://dayt0n.github.io/odysseus/odysseus-0.999.zip, check SHA1 for integrity then extract the .zip to get xpwntools.
+To use Apple's iOS low-level firmware image from a kloader boot, we must have decrypted files. In order to get decrypted images, use decryption keys from TheiPhoneWiki.
+Select your device, then the firmware you want to install as a secondary OS. Be careful to get keys from the right build number as your downloaded ipsw file.
+<br></br>
+Use xpwntools to decrypt the firmware images. From a terminal, go to the "Stock" folder.<br></br>
+<span class="cli">pmbonneau-mac#xpwntool [encrypted .img3 file] [decrypted output .img3 file] -iv [IV] -k [KEY] -decrypt</span><br></br>
+The <span class="cli">decrypt</span> flag is very important, because it keeps the .img3 container. If this flag is not used, you will end up with the data portion only (necessary for disassembly).
+<br></br>
+Use the previous command to decrypt the following .img3 files from the "Stock" folder.
+<br></br>
+LLB.[...].img3
+<br></br>
+iBoot.[...].img3
+<br></br>
+DeviceTree.[...].img3
+<br></br>
+applelogo.[...].img3
+<br></br>
+recoverymode.[...].img3
+<br></br>
+kernelcache.release.[Device ID]
+<br></br>
+Example using iPhone 4 (iPhone3,1 - N90AP) iOS 6.1.3 (10B329) images.
+<br></br>
+LLB :
+<p class="cli">pmbonneau-mac#xpwntool LLB.n90ap.RELEASE.img3 LLB.n90ap.RELEASE_dec.img3 -iv e719a869fbb2a2265f78af5551842991 -k 681f1b336ce0edc1832d0064b73e8b095033c161fef947df9f663a75f10525fd –decrypt</p>
+<img class="align" src="resources/decrypt_fw-decrypt_llb.png">
+Open the decrypted image in a hex editor. If you see the string "LLB for...", LLB image is properly decrypted.
+<img class="align" src="resources/decrypt_fw-hex_decrypted_llb.png">
+<br></br>
+iBoot :
+<p class="cli">pmbonneau-mac#xpwntool iBoot.n90ap.RELEASE.img3 iBoot.n90ap.RELEASE_dec.img3 -iv b559a2c7dae9b95643c6610b4cf26dbd -k 3dbe8be17af793b043eed7af865f0b843936659550ad692db96865c00171959f -decrypt</p>
+<img class="align" src="resources/decrypt_fw-decrypt_iboot.png">
+Open the decrypted image in a hex editor. If you see the string "iBoot for...", iBoot image is properly decrypted.
+<br></br>
+<br></br>
+DeviceTree :
+<p class="cli">pmbonneau-mac#xpwntool DeviceTree.n90ap.img3 DeviceTree.n90ap_dec.img3 -iv 4a44e07427942e3f0769cd2fb748f60e -k 19dc906dbea48840bb32c20add34ac2ac3c2e599370b9b0964a13212dd8aa7e4 –decrypt</p>
+<img class="align" src="resources/decrypt_fw-decrypt_devicetree.png">
+Open the decrypted image in a hex editor. If you see some redeable strings such as model number (ex. N90AP), DeviceTree image is properly decrypted.
+<img class="align" src="resources/decrypt_fw-hex_decrypted_devicetree.png">
+<br></br>
+Boot logo :
+<p class="cli">pmbonneau-mac#xpwntool applelogo@2x.s5l8930x.img3 applelogo@2x.s5l8930x_dec.img3 -iv 02c61d93a817034d49edb0ad1ef4e77e -k ac48545272fa0c0bd806d9e9e9f3d923e650f5d114b1f9aeef4dd2da326e680c –decrypt</p>
+<img class="align" src="resources/decrypt_fw-decrypt_applelogo.png">
+Open the decrypted image in a hex editor. If you see "iBootIm" at the beginning of the hex view, logo image is properly decrypted.
+<img class="align" src="resources/decrypt_fw-hex_decrypted_logo.png">
+<br></br>
+Recovery Mode logo :
+<p class="cli">pmbonneau-mac#xpwntool recoverymode@2x~iphone.s5l8930x.img3 recoverymode@2x~iphone.s5l8930x_dec.img3 -iv ce172d5bf5c8a981cc7f3b748aef06db -k 3a0c613f70305a962738717a203988db879dce0d2866a2cc0c87258e0fb7d5ad –decrypt</p>
+<img class="align" src="resources/decrypt_fw-decrypt_recoverylogo.png">
+Open the decrypted image in a hex editor. If you see "iBootIm" at the beginning of the hex view, logo image is properly decrypted.
+<br></br>
+<br></br>
+Kernelcache :
+<p class="cli">pmbonneau-mac#xpwntool kernelcache.release.n90 kernelcache.release.n90_dec -iv 8f0e033069987ea966ef21cbd57ab385 -k 62c4d022a02d2c000b51705796d11661610c85f0b09f98ac0322d78a12463227 –decrypt</p>
+<img class="align" src="resources/decrypt_fw-decrypt_kernelcache.png">
+Open the decrypted image in a hex editor. If you see "complzss" at the beginning of the hex view, kernelcache image is properly decrypted.
+<img class="align" src="resources/decrypt_fw-hex_decrypted_kernel.png">
+The "Stock" folder content should looks like the one of this screenshot.
+<br></br>
+<img class="align" src="resources/decrypt_fw-stock_after_decrypt.png">
+<br></br>
+
+<br><br>
+<center><a href="bootchain_basics.html" class="menu"><b>> Part 4:</b> iOS bootchain basics</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2019 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

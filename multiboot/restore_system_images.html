@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS Multiboot - Restore iOS system images</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Restore iOS system images</h1>
+<p align="justify">
+Apple's iOS is installed on devices throught a .dmg image which contains the exact filesystem that will be installed on the device system partition. Except when kernelcache file is added to it, the system partition is never modified and stay intact until overwritten by an updated iOS dmg image.
+When an iOS device is restored, the process is handled by the restore daemon. This is an executable file named <span class="cli">restored_external</span> located in <span class="cli">/usr/local/bin/</span> on the restore ramdisk.
+<br></br>
+It does the following routines.
+<ul>
+<li>Partition NAND device : Creates one smaller partition to store iOS base system and another one which fills the rest of the empty space to store user data.</li>
+<li>Format partitions : Creates a filesystem on the partitions such as HFS+ and set names as <span class="cli">System</span> and <span class="cli">Data</span>.</li>
+<li>Restore base system image : Flash the base system .dmg image on the system partition using <span class="cli">asr</span>.</li>
+<li>Verify restored image : Verifies if the base system image is correctly written to the system partition.</li>
+<li>Flash nand_firmware data : Flash low-level firmware images.</li>
+<li>Flash baseband firmware</li>
+<li>Install kernelcache image : Install the kernelcache image file to <span class="cli">/System/Library/Caches/com.apple.kernelcaches/</span></li>
+<li>Create systembag : Creates the system keybag</li>
+</ul>
+We will reproduce these steps from the userland environment to install additional iOS systems. We could also perform this using a SSH ramdisk, but in case of multi-booting, we still have the main iOS instance accessible which makes things easier.
+<br></br>
+<br></br>
+1) Partition NAND device
+<br></br> 
+We already did it, be sure you have the configuration you want and have enough free space on system partitions before go further.
+<br></br> 
+<br></br> 
+2) Format partitions
+<br></br> 
+There are some interesting disk format utils in <span class="cli">/sbin</span> of an iOS install such as <span class="cli">newfs_hfs</span> and <span class="cli">newfs_msdos</span>. Those can be used to format a disk partition.
+<ul>
+<li><span class="cli">newfs_hfs</span> : Format to HFS+</li>
+<li><span class="cli">newfs_msdos</span> : Format to FAT</li>
+<li><span class="cli">newfs_apfs</span> : Format to APFS</li>
+</ul>
+
+On 32-bit devices up to iOS 10.x, partitions are formatted as HFS+ and for 64-bit devices from iOS 10.x to 13.x, partitions are formatted as APFS.
+<br></br> 
+The secondary iOS versions we will install for this writeup are 6.1.3 and 5.1.1, both use HFS+ as partition format.
+Let's format secondary iOS systems partitions. To invoke <span class="cli">newfs_hfs</span>, connect to the main iOS system using SSH.
+Run the following command to format the second iOS instance system partition (<span class="cli">SystemB</span>):
+<p class="cli">/sbin/newfs_hfs -s -v SystemB -b [block_size] -n a=[block_size],c=[block_size],e=[block_size] /dev/disk0s1s3</p>
+ 
+Run the following command to format the second iOS instance user data partition ("DataB"):
+<p class="cli">/sbin/newfs_hfs -s -v DataB -b [block_size] -n a=[block_size],c=[block_size],e=[block_size] /dev/disk0s1s4</p>
+ 
+Repeat for the third iOS instance :
+Run the following command to format the second iOS instance system partition ("SystemC"):
+<p class="cli">/sbin/newfs_hfs -s -v SystemC -b [block_size] -n a=[block_size],c=[block_size],e=[block_size] /dev/disk0s1s5</p>
+ 
+Run the following command to format the second iOS instance user data partition ("DataC"):
+<p class="cli">/sbin/newfs_hfs -s -v DataC -b [block_size] -n a=[block_size],c=[block_size],e=[block_size] /dev/disk0s1s6</p>
+<img class="align" src="resources/restoring_system_images-newfshfs_format_partitions.png">  
+
+<br></br>
+3) Restore base system image
+<br></br>
+We are now ready to flash our secondary iOS systems into their dedicated partitions.
+<br></br>
+Create a folder "images" in <span class="cli">/var</span> on the device. This folder will be used to store stock encrypted root filesystem .dmg images before we write them to partitions.
+Using scp, copy the encrypted .dmg image files from each secondary iOS "Stock" folder to the <span class="cli">/var/images</span> folder on the device.
+<p class="cli">pmbonneau-mac#scp -P 2022 [.dmg root filesystem image] root@localhost:/var/images</p>
+<img class="align" src="resources/restoring_system_images-rootfs_dmg_scp_transfert.png">
+Use dmg tool (installed from Cydia) to decrypt the .dmg image.
+<p class="cli">iphone-n90ap#dmg extract [encrypted .dmg image input] [decrypted .dmg image output] -k [decryption key]</p>
+<img class="align" src="resources/restoring_system_images-rootfs_dmg_decryption.png">
+We currently have three methods to write a .dmg image to a disk device on iOS, each one have their own advantages and disadvantages.
+<br></br> 
+First method : Use Apple's proprietary <span class="cli">asr</span> utility (preferred method)
+<ul>
+<li>+Used in stock iOS restores and upgrades.</li>
+<li>+Does checksums and verifications</li>
+<li>+Handles compressed .dmg images</li>
+ 
+<li>-Tied with kernel extensions, iOS 7 asr might not work on iOS 5.</li>
+<li>-Some stock dmg images do not want to restore, must have a specific format or specific asr version I guess.</li>
+</ul> 
+Connect to your device using SSH and upload your decrypted root filesystem .dmg image somewhere into the main iOS user data partition (ex. /var/images).
+<br></br> 
+This command will restore the iOS 6.1.3 root filesystem image to /dev/disk0s1s3 partition (secondary iOS system partition).
+<p class="cli">asr restore --source /mnt2/UDZO.dmg --target /dev/disk0s1s3 --erase</p>
+
+This command will restore the iOS 5.1.1 root filesystem image to /dev/disk0s1s5 partition (third iOS system partition).
+<p class="cli">asr restore --source /mnt2/UDZO.dmg --target /dev/disk0s1s3 --erase</p>
+<br></br>
+Second method : Use <span class="cli">dd</span><br></br>
+This tool is included in most Unix based systems. It allows directly write to a disk device.
+<ul>
+<li>+No compatibility issues, version independant tool.</li>
+<li>+Works with almost all types of uncompressed .dmg images</li>
+<li>-No checksums or validation are performed</li>
+<li>-Does not expand the free space (the partition size becomes the restored dmg image size).</li>
+<li>-Needs to uncompress images before write</li>
+</ul> 
+First, you need to uncompress your decrypted .dmg image using hdiutil on a Mac computer. By default, iOS root filesystem images come compressed and read-only. This is the UDZO format.
+Flashing directly the compressed UDZO image to disk device using dd will result obviously to a corrupted and unmountable partition.
+To uncompress the image, use hdiutil.
+<p class="cli">pmbonneau-mac#hdiutil convert imagefile.dmg -format UDTO -o imagefile.dmg</p>
+The uncompressed image is much more larger than the compressed one, and represents the exact size your partition must have.
+Connect to your device using SSH and upload your uncompressed root filesystem .dmg image somewhere into the main iOS user data partition (ex. <span class="cli">/var/images</span>).
+Write it using dd, don't forget to set the correct block size (4M for 4096 and 8M for 8192).
+<p class="cli">iphone-n90ap#dd if=/var/images/UDTO.dmg of=/dev/rdisk0s1s3 bs=[block_size]</p>
+After the image is written, I highly recommand to do this.
+<p class="cli">iphone-n90ap#fsck_hfs -f /dev/disk0s1s3</p>
+It's kinda important because dd doesn't verify anything.
+<br></br>
+<br></br>
+Third method : <span class="cli">cp</span> or <span class="cli">rsync</span>
+Use this method when no one above is working.
+<ul>
+<li>+The <span class="cli">cp</span> command is included in most (if not all) Unix based systems. For <span class="cli">rsync</span>, you can install it from Saurik's repo on Cydia. I highly recommand <span class="cli">rsync</span> over <span class="cli">cp</span>, as rsync seems to handle in a more beautiful way the file attributes and permissions.</li>
+<li>+This method works with most image types that can be mounted on an iOS device, because the image container isn't flashed. This is mostly just a dumb copy.</li>
+<li>-No checksums or any integrity verifications are made.</li>
+<li>-Sometime takes a while to copy the whole root filesystem because this is not a block-level copy.</li>
+<li>-You need additional tools to mount the .dmg image.</li>
+</ul>
+First, install the following packages from Cydia.
+<br></br>
+<span class="cli">attach</span>, from my Cydia repository (http://pmbonneau.com/Cydia)
+<br></br>
+<span class="cli">detach</span>, from my Cydia repository (http://pmbonneau.com/Cydia)
+<br></br> 
+You can also only install iFile and directly mount the .dmg images from it.
+ <br></br>
+Connect to your device using SSH and upload your decrypted root filesystem .dmg image somewhere into the main iOS user data partition (ex. /var/images).
+ <br></br>
+Attach the .dmg image to a disk device.
+<p class="cli">iphone-n90ap#attach /var/images/image.dmg</p>
+A new disk device should be created in /dev.
+<ul>
+<li>disk1</li>
+</ul>
+<img class="align" src="resources/restoring_system_images-attach_dmg_image.png">
+In some cases, there might be more than one disk device created.
+<ul>
+<li>disk1</li>
+<li>disk1s2</li>
+<li>disk1s3</li>
+</ul>
+We must try to mount all of them until we find the right one. If no one works, your .dmg might be corrupted or incompatible.
+<br></br>
+Mount the disk device to a mount point. We usually use /mnt for a temporary mount.
+<p class="cli">iphone-n90ap#mount_hfs /dev/disk1 /mnt</p>
+<img class="align" src="resources/restoring_system_images-mounthfs_dmg_image.png">
+ 
+Create mount points to mount system partitions (read further in this writeup about how to do this).
+<p class="cli">mkdir /SystemB (iOS 6.1.3 system image)</p>
+<p class="cli">mkdir /SystemC (iOS 5.1.1 system image)</p>
+<br></br>
+Create mount points to mount user data partitions (read further in this writeup about how to do this).
+<p class="cli">iphone-n90ap#mkdir /DataB (iOS 6.1.3 user data)</p>
+<p class="cli">iphone-n90ap#mkdir /DataC (iOS 5.1.1 user data)</p>
+<img class="align" src="resources/restoring_system_images-create_mount_points.png"> 
+ 
+Copy the content of <span class="cli">/mnt</span> to the proper mount point.
+For example, if the iOS 6.1.3 system image is mounted on <span class="cli">/mnt</span>, we will copy its content to <span class="cli">/SystemB</span>.
+<br></br>
+With rsync:
+<p class="cli">rsync -rav /mnt/* /SystemB/</p>
+<img class="align" src="resources/restoring_system_images-rsync_second_system.png""> 
+With cp:
+<p class="cli">cp -rp /mnt/* /SystemB/</p>
+ 
+Use umount (install from Cydia) to unmount <span class="cli">/mnt</span>.
+<p class="cli">umount /mnt</p>
+ 
+Use detach to detach the .dmg device.
+<p class="cli">detach /dev/disk1</p>
+
+<img class="align" src="resources/restoring_system_images-umount.png"> 
+ 
+Verify restored root filesystems
+To be sure filesystems were not corrupted during the restore or copy process, I highly suggest you to run <span class="cli">fsck_hfs</span>. This will verify the filesystem integrity.
+<p class="cli">iphone-n90ap#fsck_hfs /dev/disk0s1s3</p>
+<p class="cli">iphone-n90ap#fsck_hfs /dev/disk0s1s5</p>
+It should output something like "The volume SystemB appears to be OK".
+<img class="align" src="resources/restoring_system_images-fsckhfs_second_data.png"> 
+ 
+Mount root filesystems
+<p class="cli">iphone-n90ap#mount_hfs /dev/disk0s1s3 /SystemB</p>
+<p class="cli">iphone-n90ap#mount_hfs /dev/disk0s1s5 /SystemC</p>
+<img class="align" src="resources/restoring_system_images-mounthfs_second_data.png"> 
+If <span class="cli">mount_hfs</span> returns an error, the filesystem might be corrupted. This could happen especially when using dd method. Format the volume again and try another of the methods above.
+
+We are now ready to restore user data partition.
+<br></br>
+In order to complete the first boot properly, iOS needs some base file under user data partition. Without those, the device will probably get stuck on the Apple logo with progress bar or even before that during the boot process.
+<br></br>
+The base files are included in the <span class="cli">/var</span> folder of the system image. We already restored it, so we can now mount our empty user data partition and copy the files to.
+<p class="cli">iphone-n90ap#mount_hfs /dev/disk0s1s4 /DataB</p>
+<p class="cli">iphone-n90ap#mount_hfs /dev/disk0s1s6 /DataC</p>
+ 
+Use <span class="cli">cp</span> or <span class="cli">rsync</span> (preferred) to copy files and folders. Important, file attributes must be preserved.
+<br></br>
+Using <span class="cli">cp</span> :
+<br></br>
+<p class="cli">iphone-n90ap#cp -rp /SystemB/var/* /DataB/</p>
+<p class="cli">iphone-n90ap#cp -rp /SystemC/var/* /DataC/</p>
+<br></br>
+Using <span class="cli">rsync</span> :
+<br></br>
+<p class="cli">iphone-n90ap#rsync -rav /SystemB/var/* /DataB/</p>
+<p class="cli">iphone-n90ap#rsync -rav /SystemC/var/* /DataC/</p>
+<img class="align" src="resources/restoring_system_images-rsync_second_data.png">
+ 
+Our secondary iOS systems are now flashed, now we need to complete the installation.
+
+</p>
+<br><br>
+<center><a href="complete_installation.html" class="menu"><b>> Part 12:</b> Complete installation</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2019 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

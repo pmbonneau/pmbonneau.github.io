@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+<meta name="description" content="iOS multiboot writeup"> 
+<meta name="keywords" content="Apple,iOS,iPhone,iPad,iPod,Untethered,Jailbreak,Dual-Boot,Multi-Boot,Winocm,Tutorial"> 
+
+<title>iOS Multiboot</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<div>
+<h1><center>iOS Multiboot</center></h1>
+<center>Here is another iOS multibooting guide. This one mostly covers the "untethered nand_firmware flash boot method" for which I worked on back in 2016 when I did my first iOS multiboot attempts. Those were nostalgic good times :^)</center><br>
+
+<center>Warning : Some parts of this tutorial involve low-level components that may contain critical information for the device to work properly. A simple mistake can definitively brick the device, making it completely useless. Do not try on newer devices if you care about jailbreak, latest firmwares might be patched.</center><br>
+<center>No warranties given, follow this guide on your own risk, you are on your own</center>
+
+<br>
+
+<h2>List of contents</h2>
+
+<div class="separator"></div>
+<p class="cell">
+<a href="requirements.html" class="menu"><b>Requirements</b></a>
+</p>
+
+<div class="separator"></div>
+<p class="cell">
+<a href="introduction.html" class="menu"><b>Introduction</b></a>
+</p>
+<div class="separator"></div>
+
+<p class="cell">
+<a href="download_firmwares.html" class="menu"><b>Part 1:</b> Download iOS firmwares</a>
+</p>
+<div class="separator"></div>
+
+<p class="cell">
+<a href="prepare_workspace.html" class="menu"><b>Part 2:</b> Prepare workspace</a>
+</p>
+<div class="separator"></div>
+
+<p class="cell">
+<a href="decrypt_firmware.html" class="menu"><b>Part 3:</b> Decrypt firmware images</a>
+</p>
+<div class="separator"></div>
+
+<p class="cell">
+<a href="bootchain_basics.html" class="menu"><b>Part 4:</b> iOS bootchain basics</a>
+</p>
+<div class="separator"></div>
+
+<p class="cell">
+<a href="patch_llb_iboot.html" class="menu"><b>Part 5:</b> Patch LLB and iBoot</a>
+</p>
+<div class="separator"></div>
+
+<p class="cell">
+<a href="dataprotection_basics.html" class="menu"><b>Part 6:</b> iOS Dataprotection basics</a>
+</p>
+<div class="separator"></div>
+
+<p class="cell">
+<a href="patch_devicetree.html" class="menu"><b>Part 7:</b> Patch DeviceTree</a>
+</p>
+<div class="separator"></div>
+
+<p class="cell">
+<a href="flash_nand_firmware.html" class="menu"><b>Part 8:</b> Flash nand_firmware</a>
+</p>
+<div class="separator"></div>
+
+<p class="cell">
+<a href="prepare_main_ios.html" class="menu"><b>Part 9:</b> Prepare main iOS</a>
+</p>
+<div class="separator"></div>
+
+<p class="cell">
+<a href="partition_lwvm_table.html" class="menu"><b>Part 10:</b> Partition LwVM table</a>
+</p>
+<div class="separator"></div>
+
+<p class="cell">
+<a href="restore_system_images.html" class="menu"><b>Part 11:</b> Restore iOS system images</a>
+</p>
+<div class="separator"></div>
+
+<p class="cell">
+<a href="complete_installation.html" class="menu"><b>Part 12:</b> Complete installation</a>
+</p>
+<div class="separator"></div>
+
+</div>
+
+<h2>Credits/Thanks to</h2>
+<b>@nyan_satan</b> for his iOS dualboot writeup <a a class="blacklink" href="https://nyansatan.github.io/dualboot/"></a>, many many advices and this awesome website template.<br><br>
+<b>@danzatt</b> for his iOS dualboot writeup <a a class="blacklink" href="https://github.com/danzatt/ios-dualboot"></a>, gptfdisk compiled for iOS and hfs_resize<br><br>
+<b>@winocm</b> for the initial kloader<br><br>
+<b>@xerub</b> for advices and the improved version of kloader<br><br>
+<b>@iH8sn0w</b> for advices<br><br>
+<b>@JonathanSeals</b> for advices and multi_kloader<br><br>
+<b>@axi0mX</b> for iOS 4, iOS 5 and 64-bit kloader support<br><br>
+<b>Roderick W. Smith</b> - for gptfdisk<br><br>
+</div>
+
+<footer>
+	Copyright © 2019 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

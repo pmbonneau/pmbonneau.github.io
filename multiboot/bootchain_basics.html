@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS Multiboot - iOS bootchain basics</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>iOS bootchain basics</h1>
+<p align="justify">
+Complicated stuff, but essential to master in order to continue following this writeup.<br></br>
+Each iOS low-level firmware image is encapsulated into an img3 container which can mostly be in two states, encrypted or decrypted.
+If we open an encrypted img3 container using an hex editor, we can notice that only the <span class="cli">DATA</span> tag data part is encrypted. Other tag data aren't encrypted because bootloaders needs to be able to read them before do the decryption.
+We can also notice that encrypted img3 files have additional tags such as <span class="cli">KBAG</span> which holds the encrypted by GID img3 decryption key.
+To implement an iOS dual-boot using the method from this guide, two tags are interesting for us. Those are the IMG3 header itself (purple) and <span class="cli">TYPE</span> (red).
+<img class="align" src="resources/bootchain_basics-img3_header_type.png">
+They are probably the first to be took in consideration by the bootloader to meet the following conditions. Is the file really an img3 and which type is it (<span class="cli">ibot</span>, <span class="cli">logo</span>, <span class="cli">dtre</span>, <span class="cli">recm</span>, <span class="cli">krnl</span>).
+<br></br>
+If we open any iBoot img3 image, we can see that the IMG3 header as well as the TYPE tag contain both the data <span class="cli">tobi</span> (<span class="cli">ibot</span> in reverse order).
+On the following screenshot of an iBoot img3 file, image type in the IMG3 header is highlighted in purple and img3 TYPE tag value is highlighted in red.
+<img class="align" src="resources/flashing_nand_fw-img3_tags.png">
+We know that when the iOS device boots, LLB looks in the nand_firmware for an img3 of TYPE <span class="cli">ibot</span> to find iboot and jump to it. If LLB can't find an iBoot type image, it goes into its failsafe mode known as "soft-DFU mode".
+The LLB will mostly acts like iBSS, it will waits for a second stage bootloader to be sent over USB.
+<br></br>
+When iBoot is executed, it will first search on nand_firmware for the boot logo image <span class="cli">logo</span> then show it on the screen, after it will find and load devicetree image <span class="cli">dtre</span>, then finally it will mount the filesystem to find the kernelcache <span class="cli">krnl</span> image before execute it.
+Since low-level exploits are pretty much valuables for security researchers and that the ones found on software bootloaders (iBSS/LLB, iBEC/iBoot) can be patched easily from an iOS update, we need something that can be used to run low-level code from an upper execution level on which there is more attack surface.
+The best spot for such thing is iOS userland. It has a bigger attack surface than low-level components and burning an exploit on would only affects the current iOS version. Burning a low-level exploit would prevents the possibility of a userland jailbreak for many iOS versions.
+<br></br>
+Back in 2014, @Winocm released a set of tools called kexec-utils in which there's a program named <span class="cli">kloader</span>. <b>Using these utilities in unison will let you do awesome things</b> was in the readme file of these tools. This means that they are closely related to each other.
+<br></br>
+From a running iOS instance (userland), kloader places a custom low-level binary image into device memory and jumps to it. This will destroy the current running OS instance and jump back to the low-level environment. Since any code can be placed in device RAM, this means the custom image we load using kloader can have image validation disabled.
+Using this tool, it's possible to "reboot" the iOS bootchain. The possibilities are pretty much like a low-level exploit, thought there is a big downside. The AES GID key is disabled during the whole kloader boot process (the GID key has been disabled during the signed boot sequence). This means the kloader boot process can't decrypt images.
+There is an issue when a stock LLB image is used with kloader. Since LLB searches for an iBoot image in the nand_firmware partition, it will tries to execute the encrypted iBoot with img3 <span class="cli">TYPE</span> tag data <span class="cli">ibot</span> stored in. Since the GID isn't enabled while using kloader, LLB can't decrypt this iBoot image and it will try to run encrypted code. This will obviously makes LLB to hang.
+The issue is mostly the same for iBoot (second stage bootloader), it won't be able to load encrypted devicetree, logos and execute kernelcache. The workaround for this issue is to flash decrypted images with different img3 <span class="cli">TYPE</span> tag data into nand_firmware. Then, patch kloader boot sequence bootloaders images to find decrypted images instead of stock ones.
+</p>
+<br><br>
+<center><a href="patch_llb_iboot.html" class="menu"><b>> Part 5:</b> Patch LLB and iBoot</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2019 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

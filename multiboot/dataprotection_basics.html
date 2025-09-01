@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS Multiboot - Dataprotection Basics</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>iOS Dataprotection Basics</h1>
+
+<p align="justify">
+Keybags are an important part of iOS data protection, thought they are maybe the worst thing to deal with when installing multiple iOS instances on a single device.
+The process responsible of loading up the systembag is keybagd, one of the first daemon launched by launchd (after the kernel). It will checks if the system keybag, located in <span class="cli">/var/keybags/systembag.kb</span>, is valid.
+If the system keybag isn't valid, keybagd will end all running processes, set nvram auto-boot to false and reboot device. The device will then reboot in recovery mode.
+To create or update the systembag, iOS calls a framework called <span class="cli">/System/Library/PrivateFrameworks/MobileKeyBag.framework/MobileKeyBag</span>.
+</p>
+A keybag error usually happens for those cases:
+<ul>
+<li><p align="justify">The <span class="cli">BAG1</span> container in effaceable_storage does not matches the systembag's key. The effaceable_storage is a small section in nand_firmware which is responsible to keep some keys used by iOS. There are for example DKEY (used for data partition encryption) and <span class="cli">BAG1</span> (used by systembag). When you erase all settings and data of your device, iOS simply wipes those keys. There is a key in <span class="cli">BAG1</span> which is linked to systembag. If it does not matches, keybagd will return an error. The <span class="cli">BAG1</span> key is regenerated when systembag is updated (by modifying your device passcode for example).</p></li>
+<li><p align="justify">The systembag format isn't supported. This usually happens when you try to boot an older iOS using a systembag on a newer format. For example, using an iOS 7 systembag on iOS 6 will fail because iOS 6 does not support the iOS 7 keybag format.</p></li>
+<li>The systembag is not found or corrupted</li>
+</ul>
+<p align="justify">
+When multibooting iOS versions which use the same keybag format, you can simply copy the systembag.kb file from the main OS data partition to the same directory in the secondary OS data partition and iOS should be able to boot fine. Both OS will use the same shared key in the effaceable-storage.
+</p>
+There are however some important considerations:
+<ul>
+<li><p align="justify">Many data-protection related mechanisms may call the MobileKeyBag framework and regenerate systembag. One which will certainly cause this is changing device passcode.</p></li>
+<li><p align="justify">When using a shared effaceable-storage key, regenerate the systembag from one iOS install will likey cause keybagd errors on the others installed iOS versions if systembag isn't updated on all installed iOS versions at the same time.</p></li>
+</ul>
+
+<p align="justify">
+Those issues become way more complicated to deal with when multibooting iOS versions that use different keybag formats, for example iOS 7.x as main OS with 6.x or 5.x as secondary. In this case, we can't simply copy the systembag file between installed iOS versions because they aren't in the same format. Older iOS versions will fail to load the newer systembag formats.
+<br></br>
+Instead, we will have to generate a new systembag on the other installed iOS versions.
+The <span class="cli">MobileKeyBag.framework</span> creates the systembag according to the current framework version (which changes from an iOS version to another).
+For example, we want to dual-boot iOS 7.1.2 as main OS with iOS 6.1.3 as secondary OS. Copying the iOS 7.1.2 systembag to the iOS 6.1.3 data partition will most likely make iOS 6.1.3 fails to boot with a <span class="cli">kb_load()</span> error because iOS 6.1.3 keybagd can't load iOS 7.1.2 keybag format.
+Regenerating an iOS 6.x type keybag during the secondary OS boot will works, but you will get a bootloop when you will reboot to your main OS since the effaceable-storage key has been overwritten when the iOS 6.x keybag was created.
+We must find a way to regenerate a keybag during the secondary OS boot without touching the effaceable-storage. A special attribute called <span class="cli">no-effaceable-storage</span> in the DeviceTree image can tell the MobileKeyBag framework to do this.
+A fake key will be used instead of the one in <span class="cli">BAG1</span> (effaceable storage). This will allow generating a new systembag according to the keybag version supported by the installed iOS. Another interest of this patch is that everytime the framework is called, it will still use a fake key. This means that device passcode can be changed without caring about bootloops.
+
+To prevent <span class="cli">MobileKeyBag.framework</span> from generating a new key in effaceable-storage, we must add the <span class="cli">no-effaceable-storage</span> node in devicetree image.
+</p>
+
+<center><a href="patch_devicetree.html" class="menu"><b>> Part 7:</b> Patch DeviceTree</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2019 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

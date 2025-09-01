@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS Multiboot - Partition LwVM table</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Partition LwVM table</h1>
+<p align="justify">
+Probably the most bootloop-friendly part of this entire writeup, we are going to play with disk partitions. Most disk partitionning tools warn you to backup your data before proceed. This warning is not there for nothing, there's chance of data loss if something fails.
+If something goes wrong while playing with partitions on iOS, the device will reboot in recovery mode and you will have to restore.
+To partition iOS device disk which uses LwVM + GPT, we will use <i>gptfdisk</i>. This tool will allows us to edit the GPT partition table stored on <span class="cli">/dev/rdisk0s1</span>, then changes will be written back to the LwVM partition table stored on <span class="cli">/dev/rdisk0</span>. This is the LwvM kernel extension which handle LwVM operations.
+Note that if some invalid changes are made to the GPT, it seems LwVM kernel extension invalidates them and they are not written to disk. This prevents you from doing stupid things, but this is not a 100% reliable protection against bootloops.
+We first need to edit the GPT for the shrunk main OS data partition.
+As I understand, hfs_resize changes has been applied to the LwVM partition table but not the delivered GPT.
+To do this, use gptfdisk command with the disk volume <span class="cli">rdisk0s1</span> which holds the GPT table.
+<p class="cli">iphone-root#gptfdisk /dev/rdisk0s1</p>
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_main.png">
+To obtain the current list of partitions :
+<p class="cli">gptfdisk>p</p>
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_print_initial.png">
+This will print the list including changes that are about to be written to the disk.
+Note the <b>Logical sector size value</b> (block size) and <b>attribute flags</b>, because we will need those later in this guide in order to properly create new partitions.
+ 
+To get info about the data partition :
+<p class="cli">gptfdisk>i [enter]<br></br>
+2 [enter]</p>
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_main_data_info.png">
+We will most likely recreate the data partition with the proper size we set when we used <i>hfs_resize</i>. This will make the GPT to have the same partition configuration as the LwVM table (<i>hfs_resize</i> edited it to shrink the data partition).
+This is definitively the most risky part of the partitionning process.
+ 
+Delete the main iOS data partition :
+<p class="cli">gptfdisk>d [enter]<br></br>
+2 [enter]</p>
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_delete_main_data.png">
+Note that once you hit the second enter, the partition isn't officially deleted until you write changes.
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_print_data_deleted.png">
+ 
+Re-create the data partition, but with reduced size :
+<p class="cli">gptfdisk>n [enter]</p>
+The first sector should be keep as default. <p class="cli">[enter]</p>
+The last sector is where the partition must ends on the logical disk. We set it as a number of blocks. Each blocks has a size of [<i>block size</i>] value. For the iPhone 4, this value is 8192.
+Re-calculate the size you set to <i>hfs_resize earlier</i> :<br></br>
+1 GB = 1024 * 1024 * 1024 = 1073741824 bytes<br></br>
+8 GB = 8 * 1073741824 = 8589934592<br></br>
+Divide it by [<i>block size</i>] value :<br></br>
+8589934592 / 8192 = 1048576 blocks<br></br>
+Add the default first sector value (this number is the currently allocated number of blocks) :
+1048576 + 196819 = 1245395<br></br>
+Give this value to GPTfdisk. <p class="cli">[enter]</p>
+Keep the default Hex code.
+<p class="cli">[enter]</p>
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_recreate_main_data.png">
+ 
+Rename the recreated partition to "Data" :
+<p class="cli">gptfdisk>c [enter]<br></br>
+2 [enter]<br></br>
+Data [enter]
+</p>
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_rename_main_data.png">
+
+Verify that everything is right with the recreated partition :
+<p class="cli">gptfdisk>p [enter]</p>
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_print_recreated_data.png">
+Make sure "Data" partition size corresponds to what you have set to <i>hfs_resize</i>.
+ 
+ 
+The original Data partition had some attribute flags set to on. In order to make the recreated partition same as it was and avoid disk issues, we will put these flags to on for it.
+GPT attributes flags are defined on 64-bit. Each bit correspond to one attribute. To set an attribute, we only have to set its value to one.
+Take back the attribute flags you noted from original data partition.<br></br>
+If they were for example 0003000000000000, you will have to set bit 48 and 49 to on.<br></br>
+<pre>63                                                                                                   0</pre>
+<span class="cli">
+00000000 00000011 00000000 00000000 00000000 00000000 00000000 00000000<br></br>
+</span>
+We must now restore back special attributes to this partition :
+<p class="cli">gptfdisk>x [enter]<br></br>
+a [enter]<br></br>
+2 [enter]<br></br>
+48 [enter]<br></br>
+49 [enter][enter]
+</p>
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_set_attributes_recreated_data_1.png">
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_set_attributes_recreated_data_2.png">
+Attribute value should now be same as it was on the original data partition if you set it correctly.
+ 
+We now have to restore the original data partition GUID :
+<p class="cli">gptfdisk>c [enter]<br></br>
+2 [enter]<br></br>
+[GUID] [enter]
+</p>
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_restore_guid_recreated_data.png"> 
+Our data partition is now completely resized, time to verify we did it right before write the stuff to the GPT.
+ 
+Go back to gptfdisk basic mode :
+<p class="cli">gptfdisk>m [enter]</p>
+ 
+Verify that the data partition as been properly recreated and that is has the right size :
+<p class="cli">gptfdisk>p [enter]</p>
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_print_recreated_main_data.png"> 
+
+Now the most dangerous thing of this writeup ever, write partition changes to disk.
+<p class="cli">gptfdisk>w [enter]<br></br>
+y [enter]
+</p>
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_write_recreated_main_data.png"> 
+
+Synchronize a few times :
+<p class="cli">
+iphone-root# sync<br></br>
+iphone-root# sync<br></br>
+iphone-root# sync
+</p>
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_sync_recreated_main_data.png">
+
+On your device, open settings app. If your device is frozen, then you have to restore and start again.
+Otherwise, check the new size. It shoud correspond to what you set in <i>gptfdisk</i>.
+ 
+If the main iOS new data partition size is corresponding to what you have configured in gptfdisk, we are now ready to create additional partitions to hold secondary iOS versions.
+<br></br> 
+Re-launch <i>gptfdisk</i> :
+<p class="cli">iphone-root#gptfdisk /dev/rdisk0s1</p>
+ 
+Default partition table can only hold two partitions, we will expand it to allow creating more partitions. Please note that LwVM does not manage more than eight partitions, any additional partitions won't be considered after writing changes.
+<p class="cli">gptfdisk>x [enter]<br></br>
+s [enter]<br></br>
+4 [enter]
+</p>
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_expand_partition_table.png">
+The partition table should now accepts more than two partitions.
+ 
+As I said earlier, an iOS multiboot partition layout should looks like this.
+<ul>
+<li>System (Main OS system partition)</li>
+<li>Data (Main OS data partition)</li>
+<li>SystemB (Secondary OS system partition)</li>
+<li>DataB (Secondary OS data partition)</li>
+<li>SystemC (Third OS system partition)</li>
+<li>DataC (Third OS data partition)</li>
+<li>SystemD (Fourth OS system partition)</li>
+<li>DataD (Fourth OS data partition)</li>
+</ul>
+
+We will now create a third partition called "SystemB" to store an iOS 6.1.3 root filesystem.
+<p class="cli">gptfdisk>n [enter]<br></br>
+3 [enter]</p>
+Keep default first sector [enter]<br></br>
+Calculate the number of sectors you want to allocate to this partition. For example, if you want a 8 GB user data partition for iOS 6.1.3, then do the following maths.<br></br>
+1 GB = 1024 * 1024 * 1024 = 1073741824 bytes<br></br>
+2.4 GB = 2.4 * 1073741824 = 2576980377 bytes<br></br>
+Divide it by [block size] value :<br></br>
+2576980377 / 8192 = 314573 blocks<br></br>
+Add these blocks to the previous partition last sector :<br></br>
+1245396 + 314573 = 1559969<br></br>
+</p>
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_create_third_partition.png">
+
+Set the name of the new partition. <b>Important : Do not use "System", "Data" or "Upgrade" on additional partitions name</b> because this can cause some boot or restore process errors and potentially brick the device in worst cases.
+<p class="cli">gptfdisk>c [enter]<br></br>
+3 [enter][enter]<br></br>
+SystemB [enter]
+</p>
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_set_name_third_partition.png">
+ 
+Now, create a fourth partition to store our iOS 6.1.3 instance user data.
+<p class="cli">gptfdisk>n [enter]</p>
+<p class="cli">4 [enter]</p>
+Keep default first sector [enter]<br></br>
+Calculate the number of sectors you want to allocate to this partition. For example, if you want a 8 GB user data partition for iOS 6.1.3, then do the following maths.<br></br>
+1 GB = 1024 * 1024 * 1024 = 1073741824 bytes<br></br>
+8 GB = 8 * 1073741824 = 8589934592 bytes<br></br>
+Divide it by [block size] value :<br></br>
+8589934592 / 8192 = 1048576 blocks<br></br>
+Add these blocks to the previous partition last sector :<br></br>
+1559970 + 1048576 = 2608546<br></br>
+2608546 is our current partition last sector. Careful, if this is the last partition you are creating, keep at least 5 unused blocks from the last partition last sector and the end of the disk.
+<p class="cli">[enter]</p>
+Keep current type as Apple HFS/HFS+. <p class="cli">[enter]</p>
+Keep default Hex code or GUID <p class="cli">[enter]</p>
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_create_fourth_partition.png">
+Set the name of the new partition. Again : <b>Do not use "System", "Data" or "Upgrade" on additional partitions name</b> because this can cause some boot or restore process errors and potentially brick the device in worst cases.
+
+<p class="cli">gptfdisk>c [enter]<br></br>
+4 [enter][enter]<br></br>
+DataB [enter]
+</p>
+
+Verify that the secondary data partition as been properly recreated and that is has the right size :
+<p class="cli">gptfdisk>p [enter]</p>
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_print_fourth_partition.png"> 
+
+If everything is okay, set the attributes to the secondary data partition.
+<p class="cli">gptfdisk>x [enter]<br></br>
+a [enter]<br></br>
+2 [enter]<br></br>
+48 [enter]<br></br>
+49 [enter][enter]
+</p>
+
+Please note that those attributes may differ from an iOS version to another one. Setting the wrong ones might prevent the secondary iOS to mount the user data partition and boot properly. For 6.1.3 and 5.1.1, we know that 48 and 49 are set.
+<br></br> 
+Repeat steps from point x to y for all additional iOS versions you plan to install. Remember, lwvm won't allow you to have more than eight partitions on your device.
+<br></br> 
+Once everything is done, please do a final check.
+<p class="cli">gptfdisk>p [enter]</p>
+<img class="align" src="resources/lwvm_disk_partitionning-gptfdisk_print_sixth_partition.png"> 
+ 
+If something is wrong, you can just CTRL+C to cancel and restart from scratch. Otherwise, you are ready to write the changes.
+ 
+Again : The most delicate thing of this writeup.
+<p class="cli">gptfdisk>w [enter]<br></br>
+y [enter]
+</p>
+
+Synchronize a few times :
+<p class="cli">
+iphone-root# sync<br></br>
+iphone-root# sync<br></br>
+iphone-root# sync
+</p>
+ 
+On your device, open any app (ex. settings). If your device is frozen, then you have to restore and start again.
+ 
+Otherwise, check if new disk devices were properly created :
+<p class="cli">iphone-root#ls /dev/ | grep rdisk</p>
+You should see some disk devices.
+<ul>
+<li><span class="cli">/dev/rdisk0</span> (LwVM device)</li>
+<li><span class="cli">/dev/rdisk0s1</span> (LwVM provided GPT)</li>
+<li><span class="cli">/dev/rdisk0s1s<i>X</i></span> (GPT partitions, where <i>X</i> can be from 1 to 7)</li>
+</ul>
+There should be as much <span class="cli">/dev/rdisk0s1s<i>X</i></span> than partitions on the device.
+<img class="align" src="resources/lwvm_disk_partitionning-list_partitions.png"> 
+Finally, reboot device to be sure everything is okay:
+<p class="cli">iphone-root# reboot</p>
+ 
+If device rebooted properly, we are now ready to install an iOS system on the partitions.<br></br>
+</p>
+<center><a href="restore_system_images.html" class="menu"><b>> Part 11:</b> Restore iOS system images</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2019 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

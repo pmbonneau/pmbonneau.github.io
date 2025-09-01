@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS Multiboot - Flash nand_firmware</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Flashing nand_firmware</h1>
+<p align="justify">
+In order to flash two separate bootchains in nand_firmware, we must edit current image type in the IMG3 header and also img3 TYPE tag value on additional images. This will allows parent bootloaders to properly find them.<br></br>
+On the following screenshot of an iBoot img3 file, image type in the IMG3 header is highlighted in purple and img3 TYPE tag value is highlighted in red.
+<img class="align" src="resources/flashing_nand_fw-img3_tags.png">
+Here is a list of default stock img3 TYPE tags.
+<ul>
+<li>applelogo.[...].img3 : <span class="cli">logo</span></li>
+<li>recoverymode.[...].img3 : <span class="cli">recm</span></li>
+<li>DeviceTree.[...].img3 : <span class="cli">dtre</span></li>
+<li>iBoot.[...].img3 : <span class="cli">ibot</span></li>
+</ul>
+
+<p align="justify">
+Open these decrypted images in a hex editor. Locate the image type in the IMG3 header and TYPE tag value, then replace it with an unused one.
+Save the file with a name like the following example.
+</p>
+
+Flashing a secondary bootchain would look like this. Note that I usually use letters to identify each installed iOS install, like "B" for secondary instance, "C" for third instance, and so. I use the same rule for img3 type, like <span class="cli">ibob</span> for secondary iBoot, <span class="cli">dtrb</span> for secondary DeviceTree, and so.
+<br></br>
+<ul>
+<li>applelogo.[...].img3 : <span class="cli">logo</span></li>
+<li>recoverymode.[...].img3 : <span class="cli">recm</span></li>
+<li>DeviceTree.[...].img3 : <span class="cli">dtre</span></li>
+<li>iBoot.[...].img3 : <span class="cli">ibot</span></li>
+<li>applelogoB.[...].img3 : <span class="cli">logb</span></li>
+<img class="align" src="resources/flashing_nand_fw-hexedit_bootlogo_logb_tags.png">
+<li>recoverymodeB.[...].img3 : <span class="cli">recb</span></li>
+<img class="align" src="resources/flashing_nand_fw-hexedit_recoverylogo_recb_tags.png">
+<li>DeviceTreeB.[...].img3 : <span class="cli">dtrb</span></li>
+<img class="align" src="resources/flashing_nand_fw-hexedit_devicetree_dtrb_tags.png">
+<li>iBootB.[...].img3 : <span class="cli">ibob</span></li>
+<img class="align" src="resources/flashing_nand_fw-hexedit_iboot_ibob_tags.png">
+</ul>
+
+<p align="justify">
+Secondary LLB images will be passed to kloader from userland, so we don't have to flash them in nand_firmware.<br></br>
+<b>Important limitation:</b>
+The nand_firmware partition is currently limited in size. If size of images to flash is over than the nand_firmware partition capacity, the restore process will not return an error, but several images will be missing.
+If you need multiple distinct iOS bootchains for your multi-boot setup, you might have to use multi_kloader which allows chainloading both first and secondary bootloaders from userland. This would avoid flashing many iBoot images, which are pretty huge, into the nand_firmware.
+If you are using an iPad, iBoot can be directly passed to kloader. I don't know exactly why, but iBoot seems to do some LLB stuff on iPads. This will allow you to save space on the nand_firmware for DeviceTree images and boot logos.
+<br></br>
+You should have the following files in the "Patched" folder of each secondary iOS systems you plan to install, where [x] represents the letter used to identify the OS instance.
+</p>
+
+<ul>
+<li>LLB[x].[...].bin</li>
+<li>iBoot[x].[...].img3</li>
+<li>applelogo[x].[...].img3</li>
+<li>recoverymode[x].[...].img3</li>
+<li>DeviceTree[x].[...].img3</li>
+</ul>
+
+<img class="align" src="resources/flashing_nand_fw-patched_folder_content.png">
+Extract the .ipsw file of your signed main iOS firmware. Since I'm using an iPhone 4 (N90AP), iOS 7.1.2 is the latest signed firmware. However, it's still possible to use firmwares for which SHSH blobs has been saved as main OS.
+Go to <span class="cli">/Firmware/all_flash/allflash.[BoardID].[Build Type]</span>, then copy the patched images into this folder.
+<img class="align" src="resources/flashing_nand_fw-allflash_added_images.png">
+After, locate the <span class="cli">manifest</span> file then open it using a text editor.
+<img class="align" src="resources/flashing_nand_fw-locate_manifest.png">
+The <span class="cli">manifest</span> file contains a list of images that will be flashed into nand_firmware during the restore process.
+Add filenames at the bottom of the <span class="cli">manifest</span> file, so it looks like that.
+<br></br>
+<img class="align" src="resources/flashing_nand_fw-edited_manifest.png">
+Be sure every filenames present in the manifest file have a file named same in the all_flash folder, otherwise the restore process will error. Filenames must also contains some recognized patterns, such as "applelogo", "recoverymode", "DeviceTree", "iBoot". Files with a different name might make the restore process fail.
+<br></br>
+Step 9) Preparing firmware for restore
+Repack the firmware into a .ipsw file using zip.
+<img class="align" src="resources/flashing_nand_fw-repack_ipsw.png">
+<img class="align" src="resources/flashing_nand_fw-repacked_ipsw.png">
+Then, restore it using iDeviceRestore. Do not use iTunes, because it won't flash the additional images as I seen back in the days.
+<p class="cli">pmbonneau-mac#pmbonneau-mac#idevicerestore –e iPhone3,1_7.1.2_11D257_Restore_multiboot.ipsw</p>
+You can see in iDeviceRestore console that additional images has been took in consideration by the restore process if you see like on this screenshot.
+<img class="align" src="resources/flashing_nand_fw-flashed_additional_images.png">
+If something fails, restore process will return an error and device will reboot in recovery mode. Correct the issue and retry.
+Otherwise, device will boot correctly to main OS setup.
+</p>
+<br><br>
+<center><a href="prepare_main_ios.html" class="menu"><b>> Part 9:</b> Prepare main iOS</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2019 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

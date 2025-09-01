@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS Multiboot - Patch LLB and iBoot</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Patch LLB and iBoot</h1>
+<p align="justify">
+Since kloader requires images to be decrypted, signature checks will obviously fail. In order to be executed by the parent bootloader, the current bootloader images must be patched for signature checks. This can be easily done using iH8Sn0w's iBootPatcher.
+This is a dynamic patcher that finds assembly code patterns in the image, search for specific instructions, then apply the proper patches.
+Use iBootPatcher with the following arguments in order to prepare patched images.
+<br></br>
+a) Patching LLB :
+<p class="cli">pmbonneau-mac#iboot32patcher LLB.n90ap.RELEASE_dec.bin LLB.n90ap.RELEASE_dec_patched.bin</p>
+<img class="align" src="resources/patch_llb_iboot-ibootpatcher_llb.png">
+b) Patching iBoot
+<p class="cli">pmbonneau-mac#iboot32patcher iBoot.n90ap.RELEASE_dec.bin iBoot.n90ap.RELEASE_dec_patched.bin -b "rd=disk0s1s[x] -v amfi=0xff cs_enforcement_disable=1"</p>
+Replace [x] by the partition number of your secondary iOS instance. This is the secondary iOS instance system partition (the one which has the fstab).
+<br></br>
+Usually, an iOS multi-boot disk setup is organized like this.
+<br></br>
+- Main OS -
+<ul>
+<li>/dev/rdisk0s1s1 (System)</li>
+<li>/dev/rdisk0s1s2 (Data)</li>
+</ul>
+<br></br>
+- Secondary OS -
+<ul>
+<li>/dev/rdisk0s1s3 (SystemB)</li>
+<li>/dev/rdisk0s1s4 (DataB)</li>
+</ul>
+<br></br>
+- Third OS -
+<ul>
+<li>/dev/rdisk0s1s5 (SystemC)</li>
+<li>/dev/rdisk0s1s6 (DataC)</li>
+</ul>
+<br></br>
+- Fourth OS -
+<ul>
+<li>/dev/rdisk0s1s7 (SystemD)</li>
+<li>/dev/rdisk0s1s8 (DataD)</li>
+</ul>
+<br></br>
+Since I'm installing iOS 6.1.3 as a secondary OS, patching iBoot using iBootPatcher will looks like this.
+<p class="cli">pmbonneau-mac#iboot32patcher iBoot.n90ap.RELEASE_dec.bin iBoot.n90ap.RELEASE_dec_patched.bin -b "rd=disk0s1s3 -v amfi=0xff cs_enforcement_disable=1"</p>
+<img class="align" src="resources/patch_llb_iboot-ibootpatcher_iboot1.png">
+<img class="align" src="resources/patch_llb_iboot-ibootpatcher_iboot2.png">
+This will tell the kernelcache which partition is the root device, so it will be able to find launchd.
+<br></br>
+<br></br>
+As said in step 6, LLB finds an iBoot image with TYPE <span class="cli">ibot</span>, then iBoot searches for boot logo (<span class="cli">logo</span>), recovery logo (<span class="cli">recm</span>) and DeviceTree (<span class="cli">dtre</span>) in nand_firmware.
+Stock signed images are encrypted using GID key, which is disabled before booting from kloader. This means parent bootloaders will try to run encrypted code which will makes them panic.
+We have to make LLB and iBoot to search for decrypted images instead of encrypted stock ones.
+In most cases, patching a regular string in a binary file can be easily done using a hex editor. Search for the string then modify it directly. However, it seems the code set the img3 TYPE tag in a register as a kind of char array. The result is an operation code (OP code) that is not easy to find by searching with a hex editor.
+So, we will have to disassemble the bootloader images in order to find proper functions and patch the img3 TYPE tag argument passed to those.
+Let's use Ghidra, a free disassembly tool brought to us by NSA, to see what's going on in those Apple's iOS bootloaders.
+<br></br>
+a) Patch LLB <span class="cli">nand_fw_search_for_image("ibot") function.</span><br></br>
+Once Ghidra is installed and properly working, open the decrypted LLB image. Before that, be sure that the image isn't wrapped into an img3 container. To verify this, open the LLB image in a hex editor and check if the bytes at 0x0 to 0x4 are 0xe0000ea (ARM Reset Vector). If they aren't, probably your image isn't properly decrypted.
+Open your decrypted LLB image <span class="cli">LLB.n90ap.RELEASE_dec_patched.bin</span>, then select "ARM v7 32-bit Little Endian Thumb" (ARM v7 32-bit Little Endian Thumb) as language. Press "OK" to continue.
+<img class="align" src="resources/patch_llb_iboot-ghidra_import_llb.png">
+With Ghidra, you can organize your work on disassembled images like this.
+<img class="align" src="resources/patch_llb_iboot-ghidra_organize_images.png">
+Keep default options, then press "Analyze". Ghidra will start the image disassembly process.
+<img class="align" src="resources/patch_llb_iboot-ghidra_image_settings.png">
+By default, any opened iOS bootloader images will be based to 0x00000000. In order to represent as much as possible the real device environment, you need to rebase the image to the address for which the image is set to run.
+The rebase address is often in the first 0x120 bytes of the image, in the ARM initialization section. You can easily notice it by the instuction bx r1 [base_addr], for which base_addr value usually has few 0's in. For example, 0x84000000 (A4 LLB) and 0x5FF00000 (A4 iBoot). Note that base_addr is shared between devices with same processor.
+<img class="align" src="resources/patch_llb_iboot-ghidra_llb_rebase_addr.png">
+<br></br>
+In this case, our rebase address for LLB is 0x84000000. Go to "Window", then "Memory Map".
+<img class="align" src="resources/patch_llb_iboot-ghidra_memory_map_select.png">
+<br></br>
+Click on the house icon at the upper right, then enter the base address found in the code.
+<img class="align" src="resources/patch_llb_iboot-ghidra_enter_rebase_addr.png">
+<br></br>
+Image base address should be updated. 
+<img class="align" src="resources/patch_llb_iboot-ghidra_enter_rebase_addr2.png">
+<img class="align" src="resources/patch_llb_iboot-ghidra_image_rebased.png">
+<br></br>
+We now need to search for the "tobi" (because of endianess) string. It is usually located near of 0x800 to 0x1000, but this can vary from image versions. The right place in the function can be easily located by seeing this pattern movw r0, 0x6f74 ("ot") and movt r0, 0x6962 ("ib").
+<img class="align" src="resources/patch_llb_iboot-ghidra_ibot_tag_search.png">
+<br></br>
+When you find the string, write down its address. Using a hex editor, open the image, go to this position.
+<img class="align" src="resources/patch_llb_iboot-hexedit_ibot.png">
+<br></br>
+Replace the "t" by "b" for <span class="cli">ibob</span> or replace the hex value to 62.
+<img class="align" src="resources/patch_llb_iboot-hexedit_ibot2.png">
+Save the file, you can overwrite <span class="cli">LLB.n90ap.RELEASE_dec_patched.bin</span> with the new patch.
+<br></br>
+b) Patch iBoot <span class="cli">nand_fw_search_for_image("[type]")</span> function.
+The only image that iBoot really needs to load for the kernel to be able to boot is the devicetree. Other images such as logos aren't required, but they add more estetic look to the whole thing.
+The patching process is similar than what we did with LLB, but instead we search for other image strings.
+<br></br>
+Open your decrypted iBoot image <span class="cli">iBoot.n90ap.RELEASE_dec_patched.bin</span>, then select "ARM v7 32-bit Little Endian Thumb" (ARM v7 32-bit Little Endian Thumb) as language. Press "OK" to continue.
+Once your iBoot image is analyzed, look for the rebase address same we did with LLB.
+<img class="align" src="resources/patch_llb_iboot-ghidra_iboot_rebase_addr.png">
+<br></br>
+Now, let's search in iBoot for functions which prepare img3 TYPE tags to find in nand_firmware.
+If we want to completely customize the boot process, we need to patch out three img3 TYPE values in iBoot.
+<ul>
+<li>logo (boot logo)</li>
+<li>recm (recovery logo)</li>
+<li>dtre (device tree)</li>
+</ul>
+Let's begin with logo. Open applelogo@2x.s5l8930x.img3 using a hex editor and look for the img3 TYPE (EPYT) tag. The value of this tag is logo (ogol). As you can see, there are two "ogol" in this img3 file. The first one is the img3 MAGIC value and the second one is the TYPE tag.
+<img class="align" src="resources/patch_llb_iboot-hexedit_logo_type.png">
+In the iBoot image, search for value "0x676F" using Ghidra's search program text functionality.
+<img class="align" src="resources/patch_llb_iboot-ghidra_iboot_search_logo.png">
+Ghidra will bring you to the function which sets to "logo" the image to search for in nand_firmware.
+<img class="align" src="resources/patch_llb_iboot-ghidra_iboot_found_logo.png">
+Write down found address. Using a hex editor, open the image, go to this position (0xD10) then replace the "o" by "b" for <span class="cli">logb</span> or replace the hex value to 62.
+<img class="align" src="resources/patch_llb_iboot-ghidra_iboot_patch_logo.png">
+Second, "recm" is slighty after the <span class="cli">logo</span>.
+In the iBoot image, search for value "0x636D" using Ghidra's search program text functionality.
+<img class="align" src="resources/patch_llb_iboot-ghidra_iboot_found_recm.png">
+Write down found address. Using a hex editor, open the image, go to this position then replace the "m" by "b" for <span class="cli">recb</span> or replace the hex value to 62.
+<img class="align" src="resources/patch_llb_iboot-hexedit_iboot_recm.png">
+<br></br>
+Third is <span class="cli">dtre</span>, located further in the image.
+In the iBoot image, search for value "0x7265" using Ghidra's search program text functionality.
+<img class="align" src="resources/patch_llb_iboot-ghidra_iboot_found_dtre.png">
+<br></br>
+Write down found address. Using a hex editor, open the image, go to this position (0x17146) then replace the "e" by "b" for <span class="cli">dtrb</span> or replace the hex value to 62.
+<img class="align" src="resources/patch_llb_iboot-hexedit_iboot_dtre.png">
+<b>Patch kernelcache image path</b>
+<br></br>
+In normal boot mode, iBoot will mount the HFS+ (or APFS) filesystem then search for a kernel image named "kernelcache" in <span class="cli">/System/Library/Caches/com.apple.kernelcaches/kernelcache</span> path. The kernelcache is packed into an img3 container and has the TYPE tag <span class="cli">krnl</span>.
+Secondary iBoot images will, by default, try to run kernelcache from <span class="cli">/System/Library/Caches/com.apple.kernelcaches/kernelcache</span> path. This will cause some unexpected behaviors in most cases because for example an old iBoot might try to load a recent iOS kernel. The kernelcache, iBoot and devicetree are closely attached to each other. Usually, they need to be from the same iOS version.
+To avoid this issue, let's patch the kernelcache image path in iBoot.
+Using a hex editor, open the image then search for "kernelcache" string. This will brings you to the first found occurence, which is not the one we need. Search for the next occurence until you find the proper path <span class="cli">/System/Library/Caches/com.apple.kernelcaches/kernelcache</span>.
+<img class="align" src="resources/patch_llb_iboot-hexedit_iboot_krnl.png">
+Patch the filename "kernelcache" to "kernelcachb". This will make the secondary iBoot to search for a file named "kernelcachb" instead of "kernelcache", loaded by the main iBoot. If you setup a multiboot with various iOS versions, you will have to set a different kernelcache path name for each iBoot (ex. "kernelcachc", "kernelcachd".
+<br></br>
+<br></br>
+<b>Reintegrate the iBoot img3 container</b>
+<br></br>
+The <span class="cli">prepare_and_jump_img3()</span> routine of LLB will unpack iBoot image data (img3 DATA) to loadaddr before jumping to it.
+It won't be able to load a RAW payload from that routine, since it expects an img3 to be uploaded. In order to properly jump to a new image, we must encapsulate <span class="cli">iBoot.n90ap.RELEASE_dec_patched.bin</span> into an img3 container.
+We can do this using xpwntools:
+<p class="cli">pmbonneau-mac#xpwntool [in decrypted payload] [out .img3 file] -t [.img3 template]</p>
+<p class="cli">pmbonneau-mac#xpwntool iBoot.n90ap.RELEASE_dec_patched.bin iBoot.n90ap.RELEASE_dec.img3 -t iBoot.n90ap.RELEASE_dec.img3</p>
+<img class="align" src="resources/patch_llb_iboot-xpwn_iboot_repack.png">
+Rename files as follow:
+<br></br>
+<span class="cli">LLB.n90ap.RELEASE_dec_patched.bin -> LLBB.n90ap.RELEASE.bin</span>
+<br></br>
+<span class="cli">iBoot.n90ap.RELEASE_dec.img3 -> iBootB.n90ap.RELEASE.img3</span>
+</p>
+<br></br>
+<center><a href="dataprotection_basics.html" class="menu"><b>> Part 6:</b> iOS Dataprotection basics</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2019 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

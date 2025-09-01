@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS Multiboot - Prepare workspace</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Prepare workspace</h1>
+
+<p align="justify">
+An iOS multi-boot can rapidely become a mess, it must be done in a structured way.
+Create a folder named "[Device] Multi-Boot" in a place you will remember on your computer.
+In that folder, create a new folder for each secondary iOS versions that you plan to install on the device. In my case, I will only create an "iOS 6.1.3" folder.
+In each iOS folders, create two folders, "Stock" and "Patched". The "Stock" folder will contains original files and "Patched" folder will contains modified files.
+<br></br>
+<img class="align" src="resources/prep_worksp-prepare_workspace_folders.png">
+<br></br>
+From the extracted .ipsw file, transfert the kernelcache file to the "Stock" folder of the corresponding iOS version.
+<br></br>
+Go to /Firmware/all_flash/allflash.[BoardID].[Build Type] and copy the following files to the "Stock" folder created previously.
+<br></br>
+applelogo.[...].img3
+<br></br>
+recoverymode.[...].img3
+<br></br>
+DeviceTree.[...].img3
+<br></br>
+iBoot.[...].img3
+<br></br>
+LLB.[...].img3
+<br></br>
+manifest
+<br></br>
+The content of the "Stock" folder should be similar as the following screenshot.
+<br></br>
+<img class="align" src="resources/prep_worksp-stock_folder_initial.png">
+<br></br>
+<br></br>
+</p>
+<center><a href="decrypt_firmware.html" class="menu"><b>> Part 3:</b> Decrypt firmware images</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2019 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

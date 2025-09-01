@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS Multiboot - Requirements</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Requirements</h1>
+<p align="justify">
+<h2>Hardware</h2>
+<ul>
+<li>Computer running the following operating systems.<br></br>
+	- MacOS 10.9 (Mavericks) to latest version. MacOS 10.9 is recommanded because most legacy jailbreaking tools can run properly on. Otherwise, MacOS 10.12 (Sierra) should would be the second choice.<br></br>
+	- Windows 7 to Windows 10 latest version<br></br>
+	- Linux (Debian based distributions are recommanded)<br></br>
+</li>
+<li>An iOS device (32-bit) :
+<br></br>
+	<ul>
+		<li>iPhone 2G</li>
+		<li>iPhone 3G</li>
+		<li>iPhone 3Gs</li>
+		<li>iPhone 4</li>
+		<li>iPhone 4s</li>
+		<li>iPhone 5</li>
+		<li>iPhone 5c</li>
+		<li>iPad 1st</li>
+		<li>iPad 2nd</li>
+		<li>iPad 3rd</li>
+		<li>iPad 4th</li>
+		<li>iPod Touch 1st</li>
+		<li>iPod Touch 2nd</li>
+		<li>iPod Touch 3rd</li>
+		<li>iPod Touch 4th</li>
+		<li>iPod Touch 5th</li>
+	</ul>
+</li>
+</ul>
+
+<h2>Software</h2>
+<h4>Mac, Windows or Linux</h4>
+<ul>
+<li>XPwnTools : A toolkit to interact with Apple's image files such as .img3 and .dmg formats.<br></br>
+	Contains useful tools such as xpwntool and dmg.<br></br><br></br></li>
+<li>iRecovery : Allows interacting with DFU and recovery modes and includes an interactive recovery mode shell.<br></br></li>
+<li>iDeviceRestore : Alternative to iTunes iOS device restore, but with more possibilities and verbosity.<br></br></li>
+<li>imagine : An img3 parser tool, we will use it to view devicetree nodes in a readable format.<br></br></li>
+<li>SSH and SCP client : Interactive command line and files transfert from computer to iOS device.<br></br>
+	- On MacOS and Linux, ssh and scp are usually built-in in the OS. If you prefer a GUI tool, you can use PuTTY for interactive shell and FileZilla to replace SCP.<br></br>
+	- On Windows, use PuTTY for interactive shell and WinSCP as GUI for SCP.<br></br><br></br></li>
+<li>ARM binary disassembler : IDA (best), Hopper (affordable) or Ghidra (free and openb-source, recommanded)</li>
+<li>Hex editor : I recommand HxD (Windows) or iHex (Mac).</li>
+<li>Jailbreak tool : Depends of the main iOS version installed on your device and it must enable task_for_pid0 on the kernel.</li>
+</ul>
+<br></br>
+<h4>iOS</h4>
+<ul>
+<li>OpenSSH : Enable SSH on the iOS device, don't forget to change the root password.</li>
+<li>hfs_resize : Resize a mounted HFS+ volume, based on the userland iOS OTA upgrade routines.</li>
+<li>gptfdisk : A disk partitioning tool for GPT.</li>
+<li>kloader : Jump back to low-level environment from userland.</li>
+<li>mksysbag : Generate a system keybag using MobileKeyBag framework.</li>
+<li>diskdev-cmds : Contains disk interaction tools such as mount, umount, etc.</li>
+<li>rsync : Synchronize files between computers, we will use it to copy files and preserve their attributes and permissions.</li>
+<li>attach : Attach a .dmg image to a disk device.</li>
+<li>detach : Detach a disk device associated to a .dmg image.</li>
+<li>nano : Easy to use command line text editor.</li>
+<li>XPwnTools (ARM version) : A toolkit to interact with Apple's image files such as .img3 and .dmg formats.</li>
+<li>kloader launcher app : Used to launch kloader from a springboard icon. Mostly for the "wow" effect.</li>
+</ul>
+</p>
+<br><br>
+<center><a href="introduction.html" class="menu"><b>> Introduction:</b> Introduction</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2019 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>
