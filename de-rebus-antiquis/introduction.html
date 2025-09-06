@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>De Rebus Antiquis - Introduction</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Introduction</h1>
+<p align="justify">
+May 10th 2018, I woke up in the morning, looked at my Twitter feed and saw <a href="https://twitter.com/xerub/status/994564928345395201">this</a></b> by <a href="https://www.twitter.com/xerub">@xerub</a>. I already knew Xerub for some of his work about iOS low-level environment, such as tools like iBEX (iBoot payload development toolkit) and his improvements to kloader. This tweet pointed me to his personal blog, on an article with kinda a strange name, <i>De Rebus Antiquis</i>. I did a first quick read of the whole thing, and with the details given there, I learned that this is a recursive stack overflow bug heppening in the HFS+ implementation of iOS 7.x and older iBoot. The writeup was about the vulnerability itself, how it works and how to setup the exploitation environment. At the end of the blogpost, there was a base64 encoded string which, once decoded, consists of an exploitation starter kit for iPhone5 on iOS 7.0.4 (11B554a).
+</p>
+<p align="justify">
+Soon, I searched for an iPhone5,2 on iOS 7.0.4 on eBay, and it did not take a long time until I found and bought the rare pearl. Unfortunatley, I could not jailbreak that unit as it was OTA'ed and the only option at this time was to use Evasi0n 7 (checkm8 wasn't released yet). Evasi0n 7 jailbreak wasn't working at all with devices that were upgraded by OTA. Bad decision, I decided to upgrade this device to the latest iOS and sell it at loss. A friend of mine told me he was selling an iPhone 5 with blobs ranging from iOS 6.x to latest, including 7.0.4 (11B554a). I decided to buy this unit from him, perfect condition with all saved blobs. Downgraded it back to iOS 7.0.4 and jailbroke it successfully using Evasi0n. I was finally ready to try the example shown in the writeup.
+</p>
+<p align="justify">
+We were now three months after the exploit has been released, I got the whole thing running mostly out of the box since I had now the exact same hardware and software combo than Xerub used as example in his work. What I first noticed was a flashing screen at boot, then recovery mode. However, this wasn't a regular recovery mode, this was a patched one as expected.
+</p>
+<p align="justify">
+Xerub's work was intended to cover the vulnerability itself, not the pratical use (the post-exploitation) such as jailbreaking or downgrading. So, we were at our own for that part. On november 13th 2018, I successfully downgraded my iPhone 5 on iOS 7.0.4 back to iOS 6.0 (10A405) and fully untethered with the help of <a href="https://twitter.com/dora2ios">@dora2ios</a> for some additional payload patches.
+</p>
+<p align="justify">
+Somewhere in February 2020, I bought an iPad 4th on eBay. I can't tell how lucky I have been, because that unit was miraculously running that old iOS 7.0.4 (11B554a). Since we now had checkm8 BootROM exploit, I did not have to worry about the OTA'ed thing for jailbreak. I could put device in DFU mode, exploit using checkm8 then finally, save the precious SHSH blobs following the known procedure. In order to be sure I always had the possibility to go back to iOS 7.0.4 in case of a crash, I took the risk and restored the unit using those previously saved blobs. Everything was fine, so I was good to go. During that year, I worked a lot on trying to understanding some bits of the exploit in my spare time. Unfortunately, I had some issues with building the development workspace required to compile most tools from Xerub's starter kit, so this slowed me down in learning about the exploit itself. I asked Dora for some help since I knew he already did some developments such as downgrade tools using this exploit, so I could finally get proper compilers up and running. Around June 2021, I've worked with Dora to try get the exploit working on my iPad. I've found all required iBoot functions, comparing iPhone 5 offsets from Xerub's work to the ones of my iPad for that specific iOS version. Then, I ran iLoader, but got a few issues there. I sent my code to Dora and he fixed it, so he could build the proper exploit code that was working for my device. In the next year until September 2023, I've focused mostly on the shellcode part. I've worked on a way to run the new iBoot directly from the filesystem, at the end of the post-exploitation. Once I got that, I decided to start this writeup and now we are.
+</p>
+<p align="justify">
+<i>De Rebus Antiquis</i> might sounds like a kind of sorcerer's spell, but in reality, this is not. It just means about ancient things in Latin, because yes, this is quite old stuff that we are going to dig into. Note that this is only the fancy title Xerub gave to his blogpost, but the jailbreak community adopted it as the exploit name. So, I'm going to refer it with that name as well in my writeup.
+</p>
+<br></br>
+For this writeup, we will focus on the iOS 7.0.4 iBoot for iPad 4th (Wi-Fi + Cellular, P102AP). Note that what we are going to cover here can be applied on other 32-bit devices on iOS 7.x, listed below. Apple announced iOS 7 at WWDC on June 10th 2013 and released the first public build September 18th, three months later.
+<ul>
+<li>iPhone 4 (A4)</li>
+<li>iPhone 4s (A5)</li>
+<li>iPhone 5 (A6)</li>
+<li>iPhone 5c (A6)</li>
+<br></br>
+<li>iPod Touch 5th (A5)</li>
+<br></br>
+<li>iPad 2nd (A5)</li>
+<li>iPad 3rd (A5X)</li>
+<li>iPad 4th (A6X)</li>
+<br></br>
+<li>iPad Mini (A5)</li>
+</ul>
+<br></br>
+
+<br></br>
+As Xerub said in his blogpost, Apple patched <i>De Rebus Antiquis</i> in iOS 8 by adding a check to limit recursion where iBoot reads a path in a HFS+ volume. However, iBoot versions older than iOS 7.x ones might and are probably still vulnerable to. At the time of this writing, nobody released a public tool or writeup about exploiting the bug on those older versions as I know.
+<br></br>
+
+<p align="justify">
+Xerub released <i>De Rebus Antiquis</i> on May 10th 2018, there was no other iOS low-level exploit documented or that a tool was released for since Limera1n BootROM exploit in 2010. We had the iOS 5.x Heap Buffer Overflow proof of concept code released by @p0sixninja in 2017, but we were in November 2018 when @nyan_satan publicly demonstrated the exploitation. September 27th 2019, one year and four months after <i>De Rebus Antiquis</i>, <a href="https://twitter.com/axi0mX">@axi0mX</a> unveils <a href="https://twitter.com/axi0mX/status/1177542201670168576">Checkm8 BootROM exploit</a> for A5 to A11 devices. It seems that after this release, most people lost interest in <i>De Rebus Antiquis</i> and rather decided to focus on checkm8 instead. The reason of this move is probably because checkm8 cover more iOS devices, including some recent 64-bit ones of that time. However, it is important to note that Xerub's iBoot exploit has something checkm8 doesn't have, the capability to boot untethered. Here is a summary of both low-level exploit capabilities.
+<ul>
+<li>Checkm8 BootROM exploit</li>
+    <ul>
+    <li><p align="justify">Exploit triggered from DFU mode (requires device to be put in this mode prior exploitation)</p></li>
+    <li><p align="justify">Allows full control of the application processor (AP) low-level bootchain, starting from BootROM level</p></li>
+    <li><p align="justify">Allows AP demotion to enable JTAG debugging</p></li>
+    <li><p align="justify">Apple can't patch unless releasing new devices</p></li>
+    </ul>
+<br></br>
+<li><i>De Rebus Antiquis</i> iBoot exploit</li>
+    <ul>
+    <li><p align="justify">Exploit triggered from normal mode (NAND boot), this is where the untethered comes from.</p></li>
+    <li><p align="justify">Allows full control of the iOS bootchain, starting from iBoot level</p></li>
+    <li><p align="justify">Apple can patch it easily with a software update</p></li>
+    </ul>
+</ul>
+</p>
+<p align="justify">
+Since iBoot is a software, flashable component, it can be fixed. As I said previously, Apple patched <i>De Rebus Antiquis</i> in iOS 8.x and newer iBoot builds. However, you can still downgrade to a vulnerable iBoot if you got SHSH blobs for 7.x firmwares. Plus, we have checkm8 BootROM exploit which allows the downgrade without worrying to get stuck on the latest iOS firmware with no publicly available jailbreak. The two go well together after all. =)
+</p>
+<p align="justify">
+With a fancy <i>De Rebus Antiquis</i> post-exploitation, you should be able to acheive this.
+<ul>
+    <li><p align="justify">Untethered downgrade and jailbreak for devices with saved 7.x SHSH blobs to any compatible iOS firmware.</p></li>
+</ul>
+</p>
+
+<p align="justify">
+Please note : It's very hard.
+</p>
+
+<p align="justify">
+Yes, it's a tough challlenge. <i>De Rebus Antiquis</i> is maybe like two times harder to exploit than the iOS 5.x HFS+ Heap Buffer Overflow, because there is some complexity related to the development environment required to debug it. Plus, there is some additional constraints to take in consideration such as the limited space for post-exploitation code between B-Tree headers. I highly suggest you to at least, try to exploit the iOS 5.x Heap Buffer Overflow first to give you an idea of a basic HFS+ bug before attacking to this one.
+</p>
+
+<p align="justify">
+For this writeup, we are going to downgrade back an iPad 4th (Wi-Fi + Cellular, P102AP) back to iOS 7.0.4 (11B554a) using SHSH blobs then exploit the secondary stage bootloader with <i>De Rebus Antiquis</i>.
+</p>
+<br></br>
+
+<center><a href="index.html" class="menu"><b>> Part 1:</b> Download iOS firmwares</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2024 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+<meta name="description" content="De Rebus Antiquis">
+<meta name="keywords" content="Apple,iOS,iPhone,iPad,iPod,Untethered,Jailbreak,Tutorial,iBoot,Exploit,De Rebus Antiquis,Recursive,Stack,Overflow">
+
+<title>De Rebus Antiquis</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<div>
+<h1><center>De Rebus Antiquis</center></h1>
+<center>Here is a detailed writeup about exploiting the recursive stack overflow bug in iBoot-1940.x.15~2 and prior. This is most likely a core dump of my brain about all the knowledge I've gathered about that specific vulnerability since Xerub published it in 2018.
+
+The following writeup is intended to be a companion of his original work (also known by the community as <a href="https://xerub.github.io/ios/iboot/2018/05/10/de-rebus-antiquis.html">De Rebus Antiquis</a>). It is not going to cover all the analysis that is already written there, but instead give some technical info around it plus cover more the post-exploitation.</center><br></br>
+
+<center>Warning : Some parts of this writeup involve low-level components that may contain critical information for the device to work properly. A simple mistake can definitively brick the device, making it completely useless. Do not try to exploit this bug on a fixed firmware version, this will not work and will result in a bootloop.</center><br></br>
+<center>No warranties given, follow this guide on your own risk, you are on your own</center>
+
+<br></br>
+
+<h2>List of contents</h2>
+
+<div class="separator"></div>
+<p class="cell">
+<a href="introduction.html" class="menu"><b>Introduction</b></a>
+</p>
+<div class="separator"></div>
+
+</div>
+
+<br></br>
+
+<h2>Credits/Thanks to</h2>
+<b><a href="https://www.twitter.com/xerub">@xerub</a></b> for the discovery and his original writeup of the exploit, as well as the awesome name for it!<br><br>
+<b><a href="https://twitter.com/dora2ios">@dora2ios</a></b> who has explained me a lot about iloader and the exploit itself.<br><br>
+<b><a href="https://twitter.com/nyan_satan">@nyan_satan</a></b> for helpful advices with some ARM assembly stuff.<br><br>
+
+</div>
+
+<footer>
+	Copyright © 2024 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>
