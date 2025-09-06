@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS 5.x HFS+ Heap Buffer Overflow - Introduction</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Introduction</h1>
+<p align="justify">
+Back to iOS 5.x era (2011-2012), iOS jailbreaking was mostly at its peak in terms of active users. The community around was important, each new iOS releases were creating such a hype. There were a lot of iDevice jailbreaking news dedicated blogs with great content. Starting from iOS 7.x, I noticed a progressive lost of interest in iOS jailbreaking for most people. From days to days, I think that tweaks and unofficial applications development releases decreased a lot and products quality dropped significantly. Also, most of those blogs I used to read back in the time became inactive or have been closed.
+I would say, in my opinion, iOS jailbreaking was a thing. I highly doubt that I will revive such good times with current Apple software and products, especially with their most recent security model.
+<br></br>
+However, there are still some unsolved puzzles left on older devices... :^)
+<br></br>
+For this writeup, we will focus on devices listed below. Those were the ones released by Apple before mid-2012.
+<ul>
+<li>iPhone 2G</li>
+<li>iPhone 3G</li>
+<li>iPhone 3Gs</li>
+<li>iPhone 4 (A4)</li>
+<li>iPhone 4s (A5)</li>
+<br></br>
+<li>iPod Touch</li>
+<li>iPod Touch 2nd</li>
+<li>iPod Touch 3rd</li>
+<li>iPod Touch 4th (A4)</li>
+<br></br>
+<li>iPad</li>
+<li>iPad 2nd (A5)</li>
+<li>iPad 3rd (A5X)</li>
+</ul>
+<br></br>
+
+<br></br>
+The basic idea of iOS jailbreaking is to take control over Apple's chain of trust at some point on the device, starting from the low-level bootchain to the userland. More early the corruption occurs, more control the attacker has.
+We can divide iOS jailbreak types into three categories.
+<br></br>
+<ol>
+<li>SecureROM (or BootROM) exploits</li>
+    <ul>
+	<li><p align="justify">They allow a complete control over the application processor (AP) since SecureROM is the beginning of the root chain of trust.</p></li>
+    <li><p align="justify">Apple can't patch them with software updates, because the SecureROM code is "burned" into the SoC (system on chip) while device is manufactured.</p></li>
+    <li><p align="justify">Both UID and GID keys are still enabled on the AES engine.</p></li>
+    <li><p align="justify">Application processor demotion is possible (A5 and newer) to enable JTAG.</p></li>
+    <li><p align="justify">SecureROM image has two known boot methods, DFU mode and normal boot.</p></li>
+    <li><p align="justify">In DFU mode, SecureROM waits for a first stage bootloader image to be uploaded from USB before executing it. This is why vulnerabilities found in this mode require sending payloads from USB to trigger them. For post-exploitation, we will have to boot tethered because the device can't go further than <span class="cli">USB_WAIT_FOR_IMAGE()</span> if no image is send from USB.</p></li>
+    <li><p align="justify">In normal mode, SecureROM searches in <span class="cli">nand_llb</span> (an hidden firmware partition on the NAND) for an image with img3 TYPE <span class="cli">illb</span> and executes it. SecureROM doesn't wait for external data in this case, so custom payloads can be stored somewhere on the NAND and executed once exploit is triggered.</p></li>
+    <li><p align="justify">A SecureROM exploit can lead to a lifetime device jailbreak. It's also possible to downgrade back the concerned device to any released iOS versions supported or install a custom OS (ex. Linux). Setup will be tethered if exploit triggered via DFU or untethered if triggered via normal mode.</p></li>
+	</ul>
+<br></br>	
+<li>iBoot exploits</li>
+	<ul>
+	<li><p align="justify">Concern first stage (iBSS/LLB) and second stage (iBEC/iBoot) bootloaders. First stage bootloaders have less attack surface and exploits on them would provide mostly the same exploitation control, so most publicly released exploit affects second stage bootloaders.</p></li>
+    <li><p align="justify">Since iBoot is early enough in the bootchain, such exploits allow a similar control over the application processor than a SecureROM exploit except for demotion.</p></li>
+    <li><p align="justify">Apple can patch them with software updates, since iBoot is a software component that is meant to be upgraded.</p></li>
+    <li><p align="justify">Similar than SecureROM, iBoot also has two known boot methods, recovery mode and normal boot.</p></li>
+    <li><p align="justify">In recovery mode, iBoot waits for a bootloader image (ex. an iBEC or another iBoot) to be uploaded from USB before executing it.</p></li>
+    <li><p align="justify">In normal mode, iBoot searches first in nand_firmware (another hidden firmware partition on the NAND) for boot images such as logos and devicetree. Then, it will finally mount the HFS+ filesystem to find and execute the kernelcache image.</p></li>
+    <li><p align="justify">An iBoot exploit does not directly leads to a lifetime device jailbreak. However, it is often possible to downgrade back to a vulnerable iBoot version using saved SHSH blobs when Apple end software updates and there is a jailbreak available for the latest firmware of a particular device.</p></li>
+    <li><p align="justify">It's also possible to downgrade back the concerned device to any released iOS versions supported or install a custom OS (ex. Linux). Setup will be tethered if exploit triggered via DFU or untethered if triggered via normal mode.</p></li>
+	</ul>
+<br></br>
+<li>Userland (kernel) exploits</li>
+	<ul>
+	<li><p align="justify">Those come from a vulnerability exploited during userland boot process (after iBoot jumped to kernelcache image) or while the iOS system is running.</p></li>
+    <li><p align="justify">Apple can patch them with a software updates.</p></li>
+    <li><p align="justify">Use of GID key is not possible, because it has been disabled before iBoot jumped to the kernelcache image.</p></li>
+    <li><p align="justify">Downgrading or upgrading iOS is not possible with such exploits, because the low-level bootchain is still running signed. However, it is still possible to implement an iOS multi-boot and jump back to low-level environment from userland using kloader.</p></li>
+    <li><p align="justify">Most publicly available jailbreaks are from this type because it does not burn a valuable low-level exploit that could be used to find exploits for newer firmwares.</p></li>
+	<ul>
+</ol>
+<br></br>
+
+<p align="justify">
+Back in early 2012, most publicly available untethered jailbreaks were based on Limera1n BootROM exploit for the initial unsigned code execution coupled with another untethered BootROM exploit or a kernel land (userland) one to get persistence.
+</p>
+
+At this time, Apple also released A5 devices for which they patched Limera1n on the BootROM. There was now two categories of devices in terms of jailbreaking.
+<ul>
+	<li>A4 and older</li>
+		<ul>
+			<li><p align="justify">Were all vulnerable to at least one BootROM exploit (tethered or untethered)</p></li>
+			<li><p align="justify">Untethered BootROM exploit from iPhone 2G to iPhone 3Gs Old BootROM Revision</p></li>
+			<li><p align="justify">Tethered BootROM exploit for 3Gs New BootROM Revision and A4.</p></li>
+		</ul>
+		<br></br>
+	<li>A5 devices</li>
+		<ul>
+			<li><p align="justify">No low-level exploits were publicly available for those devices, only userland ones. Since Limera1n BootROM exploit was patched on A5 devices, even tethered jailbreak for newer firmwares wasn't possible.</p></li>
+		</ul>
+</ul>
+
+<p align="justify">
+For many years, there was no publicly available low-level exploit for A5 and up devices. In 2019, <a href="https://twitter.com/axi0mx">@axi0mx</a> released checkm8 BootROM exploit for devices from A5 to A11. This is an exploit running on DFU mode, similar to Limera1n. This is not a persistent (I mean untethered) exploit, it still requires to put device in DFU mode and inject the payloads via USB to take control over the low-level bootchain.
+<br></br> 
+Somewhere in 2017, <a href="https://twitter.com/p0sixninja">@p0sixninja</a> released an interesting source code written in C language that he used as a Proof-of-Concept demo for Mobile Hacking BlackHat training class back in the time. This source code was written to exploit a heap buffer overflow vulnerability in iOS 5.x iBoot HFS+ block device read function. Since iOS 5.x was deprecated many years ago, most people in the iOS jailbreak community were not interested by this work. This iBoot exploit was still superior than current publicly available low-level exploits for those iOS 5 firmwares, because it could lead to an untethered jailbreak for any firmwares supported by the affected devices. I tried to compile that code myself and run it on an iPhone 4 on iOS 5.1.1, but I could not even got the code to compile properly. It remained lost for more than a year until <a href="https://twitter.com/nyan_satan">@nyan_satan</a> successfully exploited it in november 2018. After seeing his work, I was interested to try to exploit it on my iPad 2nd (Wi-Fi+Cellular) and acquire some iOS low-level exploitation knowledge.
+After I worked on implementing manually this exploit with the help of him, I understood that this code will not work as-is because the environment on which the exploit is based isn't static. For example, we will use the HFS+ heap buffer address to base our exploitation setup, but this buffer address tends to be different depending of multiple factors like position and size of the exploit partition on the block device. Also, any changes made to device NVRAM will shift the HFS+ heap buffer, making all references set in custom payloads invalid.
+In this code, most values (ex. addresses, references, etc.) need to be adjusted for the current exploitation environment. We will also have to add our own final exploitation payload because it is missing. P0sixninja's code will still be our reference for this epic iBoot land adventure.
+<br></br> 
+With a fancy post-exploitation of this iBoot HFS+ heap buffer overflow, you will gain the following level of control over the affected devices.
+This HFS+ heap buffer overflow can be exploited on iOS 5.x and older iBoot versions. Therefore, a vulnerable iBoot version signed by Apple must be available to qualify an affected device.
+</p>
+Here is a list of concerned devices.
+<ul>
+<li>iPhone 4s</li>
+<li>iPhone 4</li>
+<li>iPhone 3Gs</li>
+<li>iPod Touch 4th</li>
+<li>iPod Touch 3rd</li>
+<li>iPad 3rd</li>
+<li>iPad 2nd</li>
+<li>Original iPad</li>
+<li>Older devices (might require additional work, especially for the post-exploitation)</li>
+</ul>
+Here are some post-exploitation examples we can do with this.
+<ul>
+<li><p align="justify">An iOS 9.3.5 untethered jailbreak on iPhone 4s, iPad 2nd and iPad 3rd. This is what we will attempt to do in this writeup. Current publicly available jailbreak for those devices are semi-untethered, this would be something original.</p></li>
+<li><p align="justify">Downgrade iPad 1st back to iOS 3, untethered (<a href="https://twitter.com/nyan_satan">@nyan_satan</a> did it).</p></li>
+<li><p align="justify">Downgrade iPhone 4 and iPod Touch 4 back to iOS 4, untethered.</p></li>
+<li><p align="justify">Install iOS 7 on iPod Touch 4, and boot untethered.</p></li>
+</ul>
+<p align="justify">
+Since iBoot is a software, flashable component, it can be fixed. Apple patched this HFS+ heap buffer overflow in iOS 6.x iBoot builds. However, you can still downgrade to a vulnerable iBoot if you got SHSH blobs for 5.x firmwares.
+</p>
+<p align="justify">
+For this writeup, we are going to downgrade back an iPad 2nd (Wi-Fi + Cellular, K94AP) back to iOS 5.0.1 (9A405) using SHSH blobs then exploit the HFS+ heap buffer overflow vulnerability on iBoot.
+</p>
+<br></br>
+<center><a href="download_firmwares.html" class="menu"><b>> Part 1:</b> Download iOS firmwares</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2020 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

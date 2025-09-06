@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS 5.x HFS+ Heap Buffer Overflow - Prepare and run shellcode</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Prepare and run shellcode</h1>
+
+<p align="justify">
+Since we now have a valid ARM reset vector that will be written to 0xBFF00000, iBoot will no longer panic when the HFS+ driver reaches this address and write data from filesystem to it. We even incorporated the whole iBoot image in our iBoot.k94ap.overwrite_9ffb80c0.bin file that we will write into the <span class="cli">Exploit</span> partition later.
+This is to prevent panics about image integrity from happening, because iBoot HFS+ driver will writes a complete clean copy of iBoot over the current running iBoot in memory.
+</p>
+
+<p align="justify">
+At this time, we could still apply image validation patches to the current running iBoot by simply applying those to the iBoot image in our <span class="cli">iBoot.k94ap.overwrite_9ffb80c0.bin</span> file. However, this won't be useful for now because we still have to figure out how we are going to stop <span class="cli">HFSReadBlock()</span> function from writing megabytes of data into memory.
+What we would like to do is to make iBoot goes back to a state where it is waiting for an input, such as recovery mode.
+Ideally, we would avoid working again on the current running iBoot in memory because as we know, there are additional structures than the bootloader itself such as TLB that are populated at runtime. We can't be certain that they have preserved their integrity after being touched by the overwrite process, for example the TLB data we write over the current running TLB might be slighy different depending of which functions have been executed on iBoot until now.
+The cleanest way I believe we could get iBoot going back to waiting state would be to make it execute a completely new image, then forcing the "new" bootloader to go in recovery mode by holding home button or hardcoding some nvram variables such as <span class="cli">boot-partition</span> in the image.
+</p>
+
+<p align="justify">
+Now, we need to figure out how we can make the current running iBoot in memory to run a custom payload that will perform the jump routine while the bootloader HFS+ driver is currently busy to write megabytes of data into memory.
+</p>
+
+<p align="justify">
+To do this, we are going to use a well known practice in ARM exploitation which consists of rewriting the IRQ (Interupt ReQuest) of the running bootloader image in order to make it jump to the shellcode once an interrupt occures. The proper term I've read about for this exploitation method is a "vector rewrite attack".
+A similar method has been used to exploit an old iOS 3.1, 3.1.2 iBoot USB bug, see <a href="https://www.theiphonewiki.com/wiki/Firmware">https://www.theiphonewiki.com/wiki/Firmware</a> for more details.
+</p>
+
+<p align="justify">
+An interrupt request is how the hardware notify the CPU about some events. In other words, hardware calls the IRQ to send messages to CPU. Read this <a href="https://www.theiphonewiki.com/wiki/Firmware">https://www.theiphonewiki.com/wiki/Firmware</a> for more info about interrupt requests on ARM.
+</p>
+
+<p align="justify">
+In our case, the CPU is running iBoot code such as the one of <span class="cli">HFSReadBlock()</span> function which is currently busy to write megabytes of data into memory. Once an interrupt request occures, the CPU jumps to the code located at [iBoot Base Address] + 0x38, which is 0x9FF000038 (IRQ) in memory.
+At this address, there is a pointer to the Interrupt Service Routine (ISR) code that the CPU will execute. As soon as some event for some hardware occures (I currently don't know which kind of events exactly), the CPU will execute the code located at the pointed address by IRQ (0x9FF00038). We are going to redirect that pointer to a custom piece of code (our shellcode) instead of the actual ISR routine code, so the CPU will run it. Our jump to shellcode success is relying on the fact that at some time, we expect that an event will occure for some hardware.
+To redirect the pointer at IRQ (0x9FF00038) address, all we have to do is to patch it in <span class="cli">iBoot.k94ap.overwrite_9ffb80c0.bin</span> then write the file back to the exploit HFS+ partition. There are some pre-requistes before we do this in order to get everything working properly. We must first know where we are going to write our compiled shellcode into the exploit HFS+ partition, which means we must also plan what the base address of our shellcode in iBoot running memory will be. The base address is, in other words, at which memory address our shellcode will be placed and executed from.
+</p>
+
+<p align="justify">
+Let's take a look at our shellcode template, which is took from <a href="https://twitter.com/nyan_satan">@nyan_satan's</a> exploitation kit. Same as what I did with the HFSReadBlock() wrapper sample code, I marked as <span class="cli">0x########</span> the addresses that needs to be set according to the device and iBoot version you are working on.
+</p>
+
+<pre><code>
+.text
+
+.pool
+
+.set BASEADDR, 0x########
+.set IRQ_VECTOR, 0x########
+
+.set real_arm_irq, 0x########
+.set printf, 0x########
+.set prepare_and_jump, 0x########
+
+.set JUMPING_INTO_IMAGE, 0x########
+
+.set JUMPADDR, 0x########
+
+.global _start
+
+_start:
+.code 16
+
+    PUSH {R0-R7, LR}
+
+    LDR R4, =real_arm_irq
+    BLX R4
+
+.code 32
+
+    BLX end
+
+
+end:
+.code 16
+
+    NOP
+
+    LDR R0, =IRQ_VECTOR
+    LDR R1, =real_arm_irq
+    STR R1, [R0]
+
+    LDR R0, =HELLO+BASEADDR
+    LDR R4, =printf
+    BLX R4
+
+    LDR R0, =JUMPING_INTO_IMAGE
+    LDR R1, =JUMPADDR
+    LDR R4, =printf
+    BLX R4
+
+    MOVS R0, #0x0
+    LDR R1, =JUMPADDR
+    MOV R2, R0
+    LDR R4, =prepare_and_jump
+    BLX R4
+
+    LDR R0, =SHOULDNT_BE_HERE+BASEADDR
+    LDR R4, =printf
+    BLX R4
+
+    POP {R0-R7, PC}
+
+
+HELLO:
+.ascii "Hello darkness, my old friend\n\x00"
+
+SHOULDNT_BE_HERE:
+.ascii "Shouldn't be here...\n\x00"
+</code></pre>
+
+<br></br>
+
+<p align="justify">
+We have few address variables to set first before we compile this shellcode.
+</p>
+
+<ol>
+<li><p align="justify"><span class="cli">BASEADDR</span>: The address in iBoot running memory from which our payload is executed. In other words, the location of our shellcode in iBoot running memory.</p></li>
+<li><p align="justify"><span class="cli">IRQ_VECTOR</span>: The IRQ vector address itself (not the pointer), should be always [iBoot Base Address] + 0x38.</p></li>
+<li><p align="justify"><span class="cli">real_arm_irq</span>: The pointer address found at <span class="cli">IRQ_VECTOR</span> ([iBoot Base Address] + 0x38).</p></li>
+<li><p align="justify"><span class="cli">printf</span>: The address of where the printf function is located in iBoot.</p></li>
+<li><p align="justify"><span class="cli">prepare_and_jump</span>: The address of where the <span class="cli">prepare_and_jump</span> is located in iBoot. This routine is responsible of copying the image data to <span class="cli">loadaddr</span> (prepare), then finally execute it (jump). It requires an argument <span class="cli">JUMPADDR</span> described at 7.</p></li>
+<li><p align="justify"><span class="cli">JUMPING_INTO_IMAGE</span>: The address of an existing string in iBoot we will display once our shellcode is running. This string takes an argument <span class="cli">JUMPADDR</span> described below.</p></li>
+<li><p align="justify"><span class="cli">JUMPADDR</span>: The address we pass as an argument to <span class="cli">prepare_and_jump</span>. It tells iBoot where the new image to prepare and eventually jump to is located in current running memory.</p></li>
+</ol>
+
+<p align="justify">
+Let's start with the <span class="cli">BASEADDR</span> variable. We usually set it as the first address in iBoot running memory which gets overwritten by filesystem data once our heap buffer overflow is triggered. From our HFSReadBlock() wrapper output, we remember that this trigger happens on the fifth HFSReadBlock() call.
+</p>
+
+<img class="align" src="resources/prep_run_shellcode-hfs_read_wrapper_fifth_read.png">
+
+<p align="justify">
+In this case, our first memory address overwritten is 0x9FFB80C0, from filesystem data at position 0x28E000.
+</p>
+
+<p align="justify">
+Remember, we read this HFSReadBlock() wrapper call as follow.
+</p>
+
+<p align="justify">
+	<q>
+	From position 0x28E000 on the HFS+ partition, 0xFFD92000 bytes are copied starting from position 0x9FFB80C0.
+	</q>
+</p>
+
+<p align="justify">
+What we have to do is to set <span class="cli">BASEADDR</span> as 0x9FFB80C0, then make the HFS+ driver write our shellcode binary exactly at position 0x9FFB80C0 in running memory. We will prepare later in this section, a block to write into our HFS+ filesystem which contains the shellcode binary. For now, we only set the <span class="cli">BASEADDR</span> variable to our first memory address overwritten (0x9FFB80C0).
+</p>
+
+From <a href="https://twitter.com/nyan_satan">@nyan_satan's</a> exploitation kit, get the <span class="cli">Stage1.s</span> file or copy the paylaod code above and paste it into an empty text file (don't forget to add a additional carriage return at the end of the code or it will fail to compile). In both cases, rename the file to <span class="cli">Shellcode_[Device identifier]_[iOS version].s</span>, where [Device identifier] is for example k94ap (iPad 2nd Wi-Fi + 3G).
+
+<img class="align" src="resources/prep_run_shellcode-new_payload_1.png">
+
+<img class="align" src="resources/prep_run_shellcode-new_payload_2.png">
+
+Set <span class="cli">BASEADDR</span> variable to 0x9FFB80C0.
+
+<img class="align" src="resources/prep_run_shellcode-set_payload_baseaddr.png">
+
+Next, set <span class="cli">IRQ_VECTOR</span> variable to [iBoot Base Address] + 0x38 (0x9FF00000 + 0x38 = 0x9FF00038).
+
+<img class="align" src="resources/prep_run_shellcode-set_payload_irq_vector.png">
+
+Set <span class="cli">real_arm_irq</span> as the value found at position [iBoot Base Address] + 0x38, note that this value is actually a pointer.
+
+<p align="justify">
+Open your decrypted stock iOS 5.0.1 iBoot in a hex editor, then look for the value at this position.
+</p>
+
+<img class="align" src="resources/prep_run_shellcode-decrypted_iboot_real_arm_irq.png">
+
+The ARM IRQ pointer value found is 0x4CB3F19F (0x9FF1B34C in normal order representation).
+
+<img class="align" src="resources/prep_run_shellcode-set_payload_real_arm_irq.png">
+
+We already have found the pointer address to <span class="cli">printf</span> function in our iBoot image when we prepared the HFSReadBlock() wrapper payload. The process to find it using Ghidra disassembler is described in the <a href="https://www.pmbonneau.com/ios5-iboot-hfs-hbo/set_hfsreadblock_wrapper.html">following section</a> of this writeup.
+
+<p align="justify">
+The address we found was 0x9FF2E9A1.
+</p>
+
+<img class="align" src="resources/prep_run_shellcode-set_payload_printf.png">
+
+<p align="justify">
+We will skip <span class="cli">prepare_and_jump</span> for now and find <span class="cli">JUMPING_INTO_IMAGE</span> first instead.
+</p>
+
+<p align="justify">
+Open the stock decrypted iOS 5.0.1 iBoot image in Ghidra, we already have set it up previously.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_project_menu.png">
+
+<p align="justify">
+Wait until Ghidra has completely analyzed the image. The disassembled output should looks like this.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_analyzed_image.png">
+
+<br></br>
+
+<p align="justify">
+Rebase properly the iBoot image, according to the procedure described <a href="https://www.pmbonneau.com/ios5-iboot-hfs-hbo/set_hfsreadblock_wrapper.html">there</a> in this writeup.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_image_rebased.png">
+
+<br></br>
+
+In Ghidra toolbar, click on "Search" then "Program Text".
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_search_program_text.png">
+
+<p align="justify">
+Search for "Jumping into image" and select "All fields".
+</p>
+
+<img class="align" src="resources/prep_run_shellcode-ghidra_jumping_into_image_string_search.png">
+
+<p align="justify">
+Ghidra should bring you to a table where most iBoot strings are located and even, it should bring you right on the "Jumping into image at 0x08x\n" one.
+</p>
+
+<img class="align" src="resources/prep_run_shellcode-ghidra_jumping_into_image_string_found.png">
+
+The address we need to set as <span class="cli">JUMPING_INTO_IMAGE</span> is 0x9FF2FAB9.
+
+<img class="align" src="resources/prep_run_shellcode-set_payload_jumping_into_image.png">
+
+Next, the <span class="cli">prepare_and_jump</span> routine pointer, this one is a bit tricky to find. We can expect that the "Jumping into image at 0x08x\n" string comes near of this routine. In fact, it is printed on the console right before the routine permorms jump to a new image. So, to find the <span class="cli">prepare_and_jump</span> routine pointer, we can start by following "Jumping into image at 0x08x\n" references until we find the routine entry point.
+
+<p align="justify">
+Go back to Ghidra, then click on the address of the "Jumping into image at 0x08x\n" string found to select it. In Ghidra toolbar, click on "Search" then "For Direct References".
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_search_direct_ref_kc_not_valid.png">
+
+<br></br>
+
+<p align="justify">
+You should see one result found. Be sure that "To Location" points to the proper string address.
+</p>
+
+<img class="align" src="resources/prep_run_shellcode-ghidra_search_direct_ref_jmp_into_img_found.png">
+
+
+<p align="justify">
+Double-click on the reference found.
+</p>
+
+<img class="align" src="resources/prep_run_shellcode-ghidra_direct_ref_jmp_into_img_string_data.png">
+
+<p align="justify">
+This is the reference to our "Jumping into image at 0x08x\n" string. Double-clicking on the <span class="cli">FUN_9FF010E4:9FF01132(R)</span> at the right of Ghidra code screen will take you to a reference of this, more precisely an inverse reference (XREF) where the string is passed as argument to <span class="cli">printf</span>.
+</p>
+
+<img class="align" src="resources/prep_run_shellcode-ghidra_direct_ref_jmp_into_img_printf_arg.png">
+
+Then finally, the <span class="cli">prepare_and_jump</span> function call should be right after the <span class="cli">printf</span> one.
+
+<img class="align" src="resources/prep_run_shellcode-ghidra_direct_ref_jmp_into_img_function_call.png">
+
+<p align="justify">
+Note that the code between <span class="cli">prinf</span> call and <span class="cli">prepare_and_jump</span> one set arguments required by <span class="cli">prepare_and_jump</span> before calling it. We actually set such arguments in our payload like this, where <span class="cli">BLX R4</span> performs the function call.
+</p>
+
+<pre><code>
+    MOVS R0, #0x0
+    LDR R1, =JUMPADDR
+    MOV R2, R0
+    LDR R4, =prepare_and_jump
+    BLX R4
+</code></pre>
+
+<p align="justify">
+Double-click on "FUN_9FF1977C", Ghidra will follow the reference.
+</p>
+
+<img class="align" src="resources/prep_run_shellcode-ghidra_direct_ref_jmp_into_img_function.png">
+
+<p align="justify">
+Then you will land directly at the start of <span class="cli">prepare_and_jump</span> routine. The address that we must set in our payload is 0x9FF1977C. Since we are calling a function in armv7 thumb, we must add 0x1 to its address.
+</p>
+
+<p align="justify">
+So, we set <span class="cli">prepare_and_jump</span> as 0x9FF1977C + 0x1.
+</p>
+
+<img class="align" src="resources/prep_run_shellcode-set_payload_prepare_and_jump.png">
+
+<p align="justify">
+Finally, <span class="cli">JUMPADDR</span> is an address in current running memory for which <span class="cli">prepare_and_jump</span> will find the new image to execute. In other words, this is where we are going to place our new iBoot image to run. This could be theorically anywhere in the physical iBoot memory space. However, we must be careful to avoid overwriting any critical structures such as our payload, TLB or iBoot itself. Here's a summary of where those structures are located in the physical memory space, at the point we currently are.
+</p>
+
+<b>Memory space</b>
+
+<ul>
+	<li><p align="justify">Current running iBoot image : 0x9FF00000 to 0x9FF00000 + 0x3E000 (size of 31 blocks, needed to store the whole iBoot image)</p></li>
+	<li><p align="justify">Prepare and jump payload (shellcode) : 0x9FFB80C0 to 0x9FFB80C0 + 0x2000 (size of one block, to create later)</p></li>
+	<li><p align="justify">TLB location : 0x9FFF8000 to 0x9FFF8000 + 0x6000 (size of three blocks)</p></li>
+</ul>
+ 
+<b>Exploit Filesystem</b>
+<ul>
+	<li><p align="justify">Current running iBoot image : 0x201D5F40 to 0x201D5F40 + 0x3E000 (size of 31 blocks, needed to store the whole iBoot image)</p></li>
+	<li><p align="justify">Prepare and jump payload (shellcode) : 0x28E000 to 0x28E000 + 0x2000 (size of one block, to create later)</p></li>
+	<li><p align="justify">TLB location (filesystem) : 0x2CDF40 + 0x6000 (size of three blocks)</p></li>
+</ul>
+
+<p align="justify">
+The most important thing is that there's no collisions in all those addresses ranges. Otherwise, the <span class="cli">exploit.sh</span> script might overwrite some previous structures it has been written itself which will obviously lead to some unexpected issues.
+</p>
+
+<p align="justify">
+I usually choose an address slighty further than 0x9FFB80C0, where our shellcode will be placed. In my case, a great spot would be at memory address 0xA0000000. In the next section, we will calculate where to write our new iBoot image in the filesystem, so it gets written to this address. 
+</p>
+
+<p align="justify">
+Set <span class="cli">JUMPADDR</span> to 0xA0000000 in the payload code.
+</p>
+
+<img class="align" src="resources/prep_run_shellcode-set_payload_jumpaddr.png">
+
+<p align="justify">
+We are ready to compile our shellcode. Same as what we did for HFSReadBlock() wrapper code, invoke the arm toolchain <span class="cli">arm-none-eabi-as</span> like this.
+</p>
+
+Compile the assembly code into an arm object.
+<p class="cli">pmbonneau-mac#arm-none-eabi-as -mthumb --fatal-warnings -o Shellcode_k94ap_5.0.1.o Shellcode_k94ap_5.0.1.s</p>
+
+<img class="align" src="resources/prep_run_shellcode-compile_payload_code_to_object.png">
+
+Copy the compiled object into an arm binary.
+<p class="cli">arm-none-eabi-objcopy -0 binary Shellcode_k94ap_5.0.1.o Shellcode_k94ap_5.0.1.bin</p>
+
+<img class="align" src="resources/prep_run_shellcode-compile_payload_object_to_binary.png">
+
+<p align="justify">
+We should get a tiny <span class="cli">Shellcode_k94ap_5.0.1.bin</span> file, which contains the compiled payload code.
+</p>
+
+<p align="justify">
+Since we know the base address of our shellcode, we can now set the pointer at IRQ (0x9FF00038) address in our <span class="cli">iBoot.k94ap.overwrite_9ffb80c0.bin</span> file to that value.
+</p>
+
+<p align="justify">
+Open <span class="cli">iBoot.k94ap.overwrite_9ffb80c0.bin</span> with a hex editor. Remember that we added a padding consisting of 0x1F40 bytes right before our iBoot image data to block-size align. Considering this, 0x9FF00000 of our iBoot image would be at 0x1F40 in our <span class="cli">iBoot.k94ap.overwrite_9ffb80c0.bin</span> file. You have to find out where 0x9FF00038 (IRQ vector) would be in that file. Pretty easy, just add 0x38 to 0x1F40 and that's it.
+</p>
+
+<img class="align" src="resources/prep_run_shellcode-ihex_iboot_irq_original_value.png">
+
+<p align="justify">
+Change this pointer to our shellcode base address which is 0x9FFB80C0 + 0x1 (since we are calling a function in ARM thumb, we must add 0x1 to this address). So, our new pointer at IRQ will be 0xC180FB9F (0x9FFB80C1 in normal order).
+</p>
+
+<img class="align" src="resources/prep_run_shellcode-ihex_iboot_irq_patched_value.png">
+
+<p align="justify">
+Once this is done, save the file then use SCP to upload it to device in the <span class="cli">/exploit</span> folder. You may have to overwrite the file if it is already existing from our previous tests.
+</p>
+
+<p align="justify">
+For now, let's create an empty blank file using <span class="cli">dd</span> to store our shellcode binary and eventually write it to our exploit filesystem. According to our compiled shellcode size, only one block should be more than enough.
+</p>
+
+<p class="cli">pmbonneau-mac#dd if=/dev/zero of=iBoot.k94ap.Shellcode_9ffb80c0.bin bs=8192 count=1</p>
+
+<img class="align" src="resources/prep_run_shellcode-dd_create_empty_payload_block.png">
+
+Same as we did for TLB and our overwritten iBoot, we must do the following maths.
+
+<ol>
+	<li>Calculate at which position in the exploit HFS+ filesystem we have to write this block containing our shellcode.</li>
+	<li>Calculate how much padding we must leave in this block before our shellcode binary, if there is a remainder.</li>
+</ol>
+
+<p align="justify">
+Remember the following:
+</p>
+
+<p align="justify">
+	<q>
+	From position 0x28E000 on the HFS+ partition, 0xFFD92000 bytes are copied starting from position 0x9FFB80C0.
+	</q>
+</p>
+
+<p align="justify">
+In other words, 0x28e000 (from filesystem) => 0x9FFB80C0 (in running memory)
+</p>
+
+<p align="justify">
+We decided to set our shellcode base address at 0x9FFB80C0 in running memory. So, the exact position of our block would be at 0x28E000 in the filesystem.
+</p>
+
+<p align="justify">
+Dividing 0x28E000 by [block size] (0x2000) will tell us how many blocks we must skip with <span class="cli">dd</span>.
+</p>
+
+<p align="justify">
+0x28E000 / 0x2000 = 0x147 (327)
+</p>
+
+<p align="justify">
+Because the data from filesystem address 0x28E000 is written directly to 0x9FFB80C0 in running memory, logically we would put our shellcode binary at the very beginning of the 327th block (since our payload base address is 0x9FFB80C0).
+</p>
+
+<p align="justify">
+Open both <span class="cli">Shellcode_k94ap_5.0.1.bin</span> and <span class="cli">iBoot.k94ap.Shellcode_9ffb80c0.bin</span> using a hex editor, then copy the payload data from <span class="cli">Shellcode_k94ap_5.0.1.bin</span> to <span class="cli">iBoot.k94ap.Shellcode_9ffb80c0.bin</span> at 0x0.
+</p>
+
+<img class="align" src="resources/prep_run_shellcode-copy_payload_data_to_block_file.png">
+
+<p align="justify">
+Using SCP, upload <span class="cli">iBoot.k94ap.Shellcode_9ffb80c0.bin</span> to the <span class="cli">/exploit</span> folder on your device.
+</p>
+
+<img class="align" src="resources/prep_run_shellcode-scp_upload_payload_block_file.png">
+
+From a SSH connection on device, edit the <span class="cli">exploit.sh</span> script using a text editor. Uncomment line echo "Writing shellcode..." then add the following dd command.
+
+<p class="cli">dd if=iBoot.k94ap.Overwrite_[heap buffer address].bin of=/dev/rdisk0s1s3 bs=[block size] seek=[block position]</p>
+
+<p class="cli">dd if=iBoot.k94ap.Overwrite_9ffb80c0.bin of=/dev/rdisk0s1s3 bs=8192 seek=327</p>
+
+<img class="align" src="resources/prep_run_shellcode-exploit_bash_script_payload_block_file.png">
+
+At this point, you can dry-run your exploit setup using kloader to see if your shellcode is properly executed. However, I think it would be more interesting to do it in the next section of this writeup after our new iBoot will be prepared. If you want to dry-run right now, just wipe the <span class="cli">Exploit</span> partition, then run the <span class="cli">exploit.sh</span> script.
+
+<br></br>
+<br></br>
+<center><a href="new_iboot.html" class="menu"><b>> Part 11:</b> The new iBoot</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2020 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

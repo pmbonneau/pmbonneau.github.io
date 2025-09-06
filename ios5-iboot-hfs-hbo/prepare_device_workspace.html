@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS 5.x HFS+ Heap Buffer Overflow - Prepare on-device workspace</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Prepare on-device workspace</h1>
+
+<p align="justify">
+In this section, we will jailbreak the device then install some useful tools.
+<br></br>
+Since this iBoot exploit is related to filesystem, we need to have full access to the disk device in order to be able to control data on it. Accessing disk at block level usually requires root privileges, so you need unsigned code execution somewhere else on your iOS device first then run a jailbroken kernel. This can be acheived by another low-level exploit (such as Limera1n for A4) with a SSH ramdisk or any other userland jailbreak.
+<br></br>
+For iOS 5.0.1 on iPad 2nd, we will use redsn0w and Corona 5.0.1 untether. This jailbreak patches <span class="cli">task_for_pid0</span>, so we will be ready to use kloader later in this writeup.
+<br></br>
+Connect your device on your computer, then open Redsn0w.
+<img class="align" src="resources/prep_device_wspace-redsnow_main_screen.png">
+
+Your device should be detected. Click the "Jailbreak" button then follow the instructions.
+<img class="align" src="resources/prep_device_wspace-redsnow_jb_instructions.png">
+
+<img class="align" src="resources/prep_device_wspace-redsnow_jb_profile.png">
+<br></br>
+<img class="align" src="resources/prep_device_wspace-redsnow_jb_profile_passwd.png">
+<br></br>
+<img class="align" src="resources/prep_device_wspace-redsnow_jb_profile_ready.png">
+
+<img class="align" src="resources/prep_device_wspace-redsnow_jb_progress.png">
+
+<img class="align" src="resources/prep_device_wspace-redsnow_jb_vpn.png">
+ 
+<img class="align" src="resources/prep_device_wspace-redsnow_jb_profile_settings.png">
+
+<img class="align" src="resources/prep_device_wspace-redsnow_jb_succeeded.png">
+
+After device is rebooted, you should see that magical icon on the next home screen page.
+<br></br>
+<img class="align" src="resources/prep_device_wspace-homescreen_cydia.png">
+<br></br>
+
+<br></br>
+Open Cydia, then add the following source.
+<br></br>
+http://www.pmbonneau.com/cydia
+<br></br>
+Install those packages on your device.
+<ul>
+	<li>OpenSSH</li>
+	
+	<li>hfsresize</li>
+
+	<li>gptfdisk</li>
+	
+	<li>kloader</li>
+
+	<li>nano</li>
+</ul>
+</p>
+<br></br>
+<b>Important note</b>
+<br></br>
+I noticed that my Cydia repository can't be used anymore on iOS 5.x (and probably older firmwares) since my website is using SSL. You will get the following error message and the added repository will be empty.
+<br></br>
+<img class="align" src="resources/prep_device_wspace-cydia_ssl_error.png">
+<br></br>
+Until I find an efficient solution to fix this issue, here is a workaround. We will manually install the required packages on device using the <span class="cli">dpkg</span> command.
+<br></br>
+Download the following packages from your computer.
+<ul>
+<li><a href="https://www.pmbonneau.com/cydia/com.pmbonneau.hfsresize_1.0_iphoneos-arm.deb">hfsresize</a></li>
+<li><a href="https://www.pmbonneau.com/cydia/com.pmbonneau.gptfdisk_1.0_iphoneos-arm.deb">gptfdisk</a></li>
+<li><a href="https://www.pmbonneau.com/cydia/com.pmbonneau.kloader5_1.2_iphoneos-arm.deb">kloader</a></li>
+</ul>
+Upload the downloaded packages to <span class="cli">/tmp</span> on device using SCP.
+<img class="align" src="resources/prep_device_wspace-scp_upload_package.png">
+From a SSH session on device, run the following command to install the package.
+<p class="cli">iPad-k94ap#dpkg -i [.deb package file]</p>
+<img class="align" src="resources/prep_device_wspace-dpkg_install_package.png">
+If the installation has been successfully completed, the package should be listed in Cydia.
+<br></br>
+<img class="align" src="resources/prep_device_wspace-cydia_gptfdisk_package_installed.png">
+<br></br>
+<center><a href="partition_lwvm_table.html" class="menu"><b>> Part 5:</b> Partition LwVM table</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2020 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

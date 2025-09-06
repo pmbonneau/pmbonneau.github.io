@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS 5.x HFS+ Heap Buffer Overflow - Download iOS firmwares</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Download iOS firmwares</h1>
+
+<p align="justify">
+In order to work on the exploit described in this writeup, a signed vulnerable iBoot must be installed on your device. If this is not the latest available firmware (ex. iOS 5.1.1 for Original iPad and iPod Touch 3rd), be sure you have proper SHSH blobs saved because you will need them to downgrade.
+Download an iOS 5.x firmware .ipsw file for which SHSH blobs are available (saved or by Apple) from theiphonewiki.
+</p>
+
+<a href="https://www.theiphonewiki.com/wiki/Firmware">https://www.theiphonewiki.com/wiki/Firmware</a>
+<br></br>
+
+<img class="align" src="resources/dwl_fw-theiphonewiki_fw_page.png">
+
+<p align="justify">
+Find the desired iOS 5.x firmware. For this writeup, I will use iOS 5.0.1 (9A405) for iPad 2nd (Wi-Fi + Cellular, K94AP). I have SHSH blobs for this firmware as well as the ones for 5.1.1, thanks a lot to <a href="https://twitter.com/alitek123">@alitek12</a> who saved them for me during the famous downgrade party!
+</p>
+
+<img class="align" src="resources/dwl_fw-theiphonewiki_fw_ios5_ipad2.png">
+<br></br>
+Click the "Download firmware" button.
+<img class="align" src="resources/dwl_fw-theiphonewiki_fw_telluride_9a405_ipad2.png">
+
+<p align="justify">
+Since November 7th 2019, Apple stopped to sign iOS 6.1.3 restore firmware for A5 devices, complicating a lot custom firmware downgrades. We won't downgrade back to 6.1.3, but we will have to flash a baseband firmware while downgrading back to iOS 5 and the one that comes with that iOS version is signed and usually well compatible.
+</p>
+
+Fortunately, they are still signing iOS 6.1.3 OTA bundle which will be used as our workaround for this issue.
+<br></br>
+On theiphonewiki, go to the OTA update page, <a href="https://www.theiphonewiki.com/wiki/OTA_Updates">https://www.theiphonewiki.com/wiki/OTA_Updates</a>
+<br></br>
+<img class="align" src="resources/dwl_fw-theiphonewiki_fw_ota.png">
+Scroll down to iPad.
+<img class="align" src="resources/dwl_fw-theiphonewiki_fw_ota_ipad.png">
+Then, find iOS 6.1.3 download section for your device.
+<br></br>
+<img class="align" src="resources/dwl_fw-theiphonewiki_fw_ota_ipad_ios6.png">
+
+<p align="justify">
+Most OTA packages only handle minor upgrades. However, there are some called full OTA which contain way more files and are made to upgrade from a major iOS version to another major iOS version. We can easily recognize full OTA firmwares from minor ones by the bundle file size. It is way more bigger.
+</p>
+
+<p align="justify">
+The currently signed iOS 6.1.3 OTA firmware bundle is the full one. For iPad 2nd (K94AP) this is <span class="cli">bbfca2293088712e39f58caf76708fbd6a53e7a7.zip</span>, which is about 840MB. It contains iOS 6.1.3 complete low-level environment images as well as baseband firmware.
+</p>
+
+<p align="justify">
+Go back to <a href="https://www.theiphonewiki.com/wiki/Firmware">https://www.theiphonewiki.com/wiki/Firmware</a> page, then download the ipsw of the iOS version you plan to install during the post-exploitation phase if you are certain about it. Otherwise, download any final versions of each major iOS releases for the device you are working on, like I will do for this writeup.
+</p>
+
+For example, I will download the following firmwares for iPad 2nd (K94AP).
+<ul>
+<li>iOS 6.1.3</li>
+<img class="align" src="resources/dwl_fw-theiphonewiki_fw_ios6_ipad2.png">
+<br></br>
+<li>iOS 7.1.2</li>
+<img class="align" src="resources/dwl_fw-theiphonewiki_fw_ios7_ipad2.png">
+<br></br>
+<li>iOS 8.4.1</li>
+<img class="align" src="resources/dwl_fw-theiphonewiki_fw_ios8_ipad2.png">
+<br></br>
+<li>iOS 9.3.5</li>
+<img class="align" src="resources/dwl_fw-theiphonewiki_fw_ios9_ipad2.png">
+</ul> 
+
+Once the files are downloaded, I strongly recommand to shasum hash them and compare results with theiphonewiki in order to verify their integrity.
+<br></br>
+<br></br>
+<center><a href="prepare_workspace.html" class="menu"><b>> Part 2:</b> Prepare workspace</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2020 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

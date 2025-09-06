@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+<meta name="description" content="iOS 5.x HFS+ Heap Buffer Overflow"> 
+<meta name="keywords" content="Apple,iOS,iPhone,iPad,iPod,Untethered,Jailbreak,Tutorial,iBoot,Exploit,Heap,Buffer,Overflow"> 
+
+<title>iOS 5.x iBoot HFS+ Heap Buffer Overflow</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<div>
+<h1><center>iOS 5.x iBoot HFS+ Heap Buffer Overflow</center></h1>
+<center>Here is a detailed writeup about the exploitation of an heap buffer overflow in iBoot-1219.62.15~2 and prior HFS+ driver implementation. The trigger is to set catalog.extents[1].blockcount in the HFS+ header to a high value. According to <a href="https://twitter.com/p0sixninja">Joshua Hill</a>, this vulnerability is one among <a href="https://twitter.com/p0sixninja/status/1044029254307119104">many</a> similar ones that could exists on those iBoot versions.</center><br>
+
+<center>Warning : Some parts of this writeup involve low-level components that may contain critical information for the device to work properly. A simple mistake can definitively brick the device, making it completely useless. Do not try to exploit this bug on a fixed firmware version, this will not work and will result in a bootloop.</center><br>
+<center>No warranties given, follow this guide on your own risk, you are on your own</center>
+
+<br>
+
+<h2>List of contents</h2>
+
+<div class="separator"></div>
+<p class="cell">
+<a href="introduction.html" class="menu"><b>Introduction</b></a>
+</p>
+<div class="separator"></div>
+
+
+<p class="cell">
+<a href="download_firmwares.html" class="menu"><b>Part 1:</b> Download iOS firmwares</a>
+</p>
+<div class="separator"></div>
+
+
+<p class="cell">
+<a href="prepare_workspace.html" class="menu"><b>Part 2:</b> Prepare workspace</a>
+</p>
+<div class="separator"></div>
+
+
+<p class="cell">
+<a href="downgrade_vulnerable_firmware.html" class="menu"><b>Part 3:</b> Downgrade back to a vulnerable firmware</a>
+</p>
+<div class="separator"></div>
+
+
+<p class="cell">
+<a href="prepare_device_workspace.html" class="menu"><b>Part 4:</b> Prepare on-device workspace</a>
+</p>
+<div class="separator"></div>
+
+
+<p class="cell">
+<a href="partition_lwvm_table.html" class="menu"><b>Part 5:</b> Partition LwVM table</a>
+</p>
+<div class="separator"></div>
+
+
+<p class="cell">
+<a href="set_hfsreadblock_wrapper.html" class="menu"><b>Part 6:</b> Set HFSReadBlock( ) wrapper</a>
+</p>
+<div class="separator"></div>
+
+<p class="cell">
+<a href="trigger_hbo.html" class="menu"><b>Part 7:</b> Trigger the heap buffer overflow</a>
+</p>
+<div class="separator"></div>
+
+<p class="cell">
+<a href="dump_overwrite_tlb.html" class="menu"><b>Part 8:</b> Dump and overwrite TLB</a>
+</p>
+<div class="separator"></div>
+
+<p class="cell">
+<a href="overwrite_running_iboot.html" class="menu"><b>Part 9:</b> Overwrite current running iBoot</a>
+</p>
+<div class="separator"></div>
+
+<p class="cell">
+<a href="prepare_run_shellcode.html" class="menu"><b>Part 10:</b> Prepare and run shellcode</a>
+</p>
+<div class="separator"></div>
+
+<p class="cell">
+<a href="new_iboot.html" class="menu"><b>Part 11:</b> The new iBoot</a>
+</p>
+<div class="separator"></div>
+
+</div>
+
+<h2>Credits/Thanks to</h2>
+<b><a href="https://twitter.com/p0sixninja">@p0sixninja</a></b> for the discovery of this vulnerability and his BlackHat training class presentation material he released for us.<br><br>
+<b><a href="https://twitter.com/nyan_satan">@nyan_satan</a></b> for many precious and helpful advices. Honestly, I would not be at this point without and this writeup would have not existed.<br><br>
+<b><a href="https://twitter.com/JonathanSeals">@JonathanSeals</a></b> for advices and his own implementation of this exploit as reference. See his <a href="https://github.com/JonathanSeals/Ancient-iBoot-Fun"><i>Ancient-iBoot-Fun</i> GitHub repository</a> for more details.<br><br>
+</div>
+
+<footer>
+	Copyright © 2020 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

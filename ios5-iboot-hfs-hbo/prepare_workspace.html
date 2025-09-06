@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS 5.x HFS+ Heap Buffer Overflow - Prepare workspace</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Prepare workspace</h1>
+
+<p align="justify">
+Working on an iBoot exploit like that one can rapidely becomes a mess, I suggest you to keep your files organized as much as possible.
+<br></br>
+Create the following folder structure in a place you will remember on your computer. I usually create a folder for the concerned device, then inside it, a folder for each iOS versions I port the exploit to.
+<br></br>
+For example, <span class="cli">./iPad 2 (K94AP)/iOS 5.0.1</span>
+<img class="align" src="resources/prep_worksp-prepare_workspace_folders.png">
+
+Move all previously downloaded files to iOS 5.0.1 folder. If you have an iOS 5.0.1 saved SHSH blobs file, copy it to this folder as well because we will need it for the downgrade.
+<br></br>
+<img class="align" src="resources/prep_worksp-shsh_ota_ipsw_files.png">
+The following files should be in the iOS 5.0.1 folder.
+<ul>
+	<li>iOS 5.0.1 SHSH blobs</li>
+	<li>iOS 5.0.1 .ipsw firmware (iPad2,2_5.0.1_9A405_Restore.ipsw)</li>
+	<li>Full iOS 6.1.3 .zip OTA firmware</li>
+	<li>Any other .ipsw firmware you plan to use for post-exploitation.</li>
+</ul>
+</p>
+<br></br>
+<center><a href="downgrade_vulnerable_firmware.html" class="menu"><b>> Part 3:</b> Downgrade back to a vulnerable firmware</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2020 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

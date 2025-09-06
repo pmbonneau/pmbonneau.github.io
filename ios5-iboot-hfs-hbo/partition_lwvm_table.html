@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS 5.x HFS+ Heap Buffer Overflow - Partition LwVM table</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Partition LwVM table</h1>
+
+<p align="justify">
+The iBoot exploit discussed in this writeup is relying on an insecure implementation of the HFS+ file system parser on iBoot versions older than iOS 5.x (included). It does not parse the HFS+ header securely, leading to a heap buffer overflow if some values are set to big numbers. This corrupted file system header might be still readable by a fixed HFS+ parser code, but the one compiled within iOS 5.x iBoot (and older versions) won't be able to and will trigger a heap buffer overflow.
+<br></br>
+Such kind of iBoot exploits that are triggered from file system have some important considerations when implemented. If the corrupted HFS+ file system is used as System partition for iOS, a vulnerable iBoot version will not be able to mount that file system to search for the kernelcache or upgrade routine images (in case of an OTA update). The corrupted HFS+ file system can only be used to trigger the exploit, not to be mounted.
+<br></br>
+To get around of this issue, we are going to create a third partition and set it as the boot one. Then, iBoot will try mount the corrupted HFS+ file system of that third partition instead of mounting the one of the System partition by default. We will also be able to use this third partition to dry-run our implementation of the exploit before attacking the main bootchain.
+<br></br>
+Before you attempt to re-partition the disk of your iOS device, I recommand you read the <a href="https://www.pmbonneau.com/multiboot/partition_lwvm_table.html">partition LwVM table guide</a> I wrote for my iOS multiboot writeup here to give you a basic idea of what you will have to do.
+<br></br>
+It contains most of the information you will need to succeed without ending up with a bootlooped device. However, there are some important differences in this process between an iBoot exploit like that one and an iOS multiboot setup.
+<br></br>
+We will do re-partitionning in four steps.
+<ul>
+	<li>Calculate the size of partitions according to our projected configuration.</li>
+	<li>Resize the LwVM container of the data partition.</li>
+	<li>Delete all existing GPT partitions (including System), then recreate all of them with the new size you want. This will be a dangerous operation, just saying.</li>
+	<li>Resize the LwVM container of the System partition to have it get the new size.</li>
+</ul>
+
+Let's begin by calculating the size of the current Data partition, according to the left space we will still have after increasing the size of the System partition and creating a new small partition for exploitation.
+<br></br>
+Execute gptfdisk with the disk volume rdisk0s1 as argument.
+<p class="cli">iPad-k94ap#gptfdisk /dev/rdisk0s1</p>
+
+<img class="align" src="resources/partition_lwvm_table-gptfdisk_main.png">
+
+To obtain the current list of partitions :
+<p class="cli">gptfdisk>p</p>
+ 
+<img class="align" src="resources/partition_lwvm_table-gptfdisk_print_initial.png">
+
+This will print the current partition configuration. On the second line, we can see that <span class="cli">/dev/rdisk0s1</span> has a total capacity of 7815175 sectors. The third line tells us that our logical sector size is 8192, so each sectors have a size of 8192 bytes. We can calculate the size in bytes of <span class="cli">/dev/rdisk0s1</span> by multiplicating the number of sectors by the logical sector size.
+<br></br>
+7815175 * 8192 = 64021913600 bytes
+<br></br>
+<span class="cli">/dev/rdisk0s1</span> : 64021913600 bytes
+<br></br>
+Now, let's calculate the System partition size. There's something important to consider, we must calculate that according to the size we plan to set for the partition.
+<br></br>
+The new size you will give to the System partition depends of your post-exploitation plans. If you think about installing different iOS versions, I suggest you set a size of 3.2 GB. This will allow you to flash most root filesystem .dmg images including iOS 9 ones and having some space for jailbreaking if you plan to.
+<br></br>
+1 GB = 1024 * 1024 * 1024 = 1073741824 bytes
+<br></br>
+3.2 GB = 3.2 * 1073741824 = 3435973836,8
+<br></br>
+Divide it by [block size] value :
+<br></br>
+3435973836,8 / 8192 = 419430,4 logical sectors
+<br></br>
+Remove decimal part, to keep an integer logical sectors number :
+<br></br>
+419430,4 -> 419430
+<br></br>
+Convert it back to bytes :
+<br></br>
+419430 * 8192 = 3435970560 bytes
+<br></br>
+<span class="cli">/dev/rdisk0s1s1</span> (System) : 3435970560 bytes
+<br></br>
+ 
+Calculate the exploitation partition size. A third partition which contains an invalid HFS+ filesystem is used to trigger the exploit once iBoot tries to mount it. There must be some available space for it right after the Data partition. To define the size of that third partition, we must consider the amount of RAM memory our device has, then add 128 MB to that value.
+<br></br>
+The iPad 2nd has 512 MB of RAM, so the ideal size of this partition would be around 512 MB + 128 MB = 640 MB.
+<br></br>
+1 MB = 1024 * 1024 = 1048576 bytes
+<br></br>
+640 MB = 1048576 * 640 = 671088640bytes
+<br></br>
+<span class="cli">/dev/rdisk0s1s3</span> (Exploit) : 671088640
+<br></br>
+Finally, calculate the size in bytes of the Data partition. Our Data partition will fit into the remaining space of the whole disk minus System and Exploit partition.
+<br></br>
+64021913600 (/dev/rdisk0s1) - 3435970560 (/dev/rdisk0s1s1) - 671088640 (/dev/rdisk0s1s3) = 59914854400 bytes (/dev/rdisk0s1s2)
+<br></br>
+<span class="cli">/dev/rdisk0s1s2</span> (Data) : 59914854400 bytes (55.8 GB)
+<br></br>
+According to the partition sizes we have calculated previously, resize the data partition LwVM container. The iOS device I'm working on for this writeup is an iPad 2nd (K48AP) 64 GB.
+<br></br>
+Initial size of data partition for iOS 5.0.1 on this device is 58.1 GB.
+<br></br>
+<img class="align" src="resources/partition_lwvm_table-device_settings_info_before.png">
+<br></br>
+We will use <span class="cli">hfs_resize</span> to shrink the LwVM container of the data partition. This will free up some space for a tiny additional partition that we will use to trigger the exploit.
+<p class="cli">iPad-k48ap#hfs_resize [mount point] [capacity in bytes]</p>
+The mount point is the folder where your disk device is mounted. For iOS, the data partition is always mounted in <span class="cli">/private/var</span> of the root filesystem. We already have calculated the new size of our Data partition, 59914854400 bytes.
+ 
+Our command to reduce the data partition would be like this.
+<p class="cli">iPad-k48ap#hfs_resize /private/var/ 59914854400</p>
+
+<img class="align" src="resources/partition_lwvm_table-hfsresize_data.png"> 
+ 
+If you look into your device settings, you should see that capacity has been reduced to 55.8 GB.
+
+<br></br>
+
+<br></br>
+
+We are now ready to adjust the size of partitions within the GPT. To partition an iOS device disk which uses LwVM + GPT, we will use gptfdisk. This tool will allows us to edit the GPT partition table stored on /dev/rdisk0s1, then changes will be written back to the LwVM partition table stored on /dev/rdisk0.
+<br></br>
+Execute gptfdisk with the disk volume rdisk0s1 as argument.
+
+<p class="cli">iPad-k94ap#gptfdisk /dev/rdisk0s1</p>
+ 
+<img class="align" src="resources/partition_lwvm_table-gptfdisk_main.png">
+ 
+Partitionning on iOS is very limited compared to most other systems. To resize a partition, you have to delete it first, then recreate it. The issue with that is when the partition is deleted, properties and attributes are lost as well. If you simply recreate the partitions without original properties and attributes, you will get a bootloop.
+<br></br>
+In order to recreate the partitions with the same properties and attributes they had before deleting them, we can display informations about our current partitions with the following command.
+
+<p class="cli">
+gptfdisk>i [enter]<br></br>
+1 [enter]
+</p>
+
+<img class="align" src="resources/partition_lwvm_table-gptfdisk_info_system.png">
+
+<p class="cli">
+gptfdisk>i [enter]<br></br>
+2 [enter]
+</p>
+ 
+<img class="align" src="resources/partition_lwvm_table-gptfdisk_info_data.png">
+ 
+Write down in a text file the following information.
+<ul>
+<li>Partition Unique GUID</li>
+<li>Attribute flags</li>
+</ul> 
+
+Before delete existing partitions, we must see which attributes flags are set. We currently know that for <span class="cli">System</span> partition we have attribute flags value <span class="cli">0000000000000000</span> set and for <span class="cli">Data</span> we have <span class="cli">0001000000000000</span> value set, but this not really significative.
+<br></br>
+Go into gptfdisk expert mode, then show attributes for partition 1.
+<p class="cli">
+gptfdisk>x [enter]<br></br>
+a [enter]<br></br>
+1 [enter]<br></br>
+[CTRL+C]
+</p>
+
+You see that there is no attributes fields set for iOS 5.0.1 System partition.
+
+<img class="align" src="resources/partition_lwvm_table-gptfdisk_attributes_system.png">
+
+Do the same for partition 2.
+<p class="cli">
+a [enter]<br></br>
+2 [enter]<br></br>
+[CTRL+C]
+</p>
+There is only bit 48 set as attribute field or the Data partition, remember this value.
+ 
+<img class="align" src="resources/partition_lwvm_table-gptfdisk_attributes_data.png">
+ 
+Go back to gptfdisk basic mode.
+<p class="cli">
+gptfdisk>m [enter]
+</p>
+
+Delete the Data partition :
+
+<p class="cli">
+gptfdisk>d [enter]<br></br>
+2 [enter]
+</p>
+
+Delete the System partition :
+
+<p class="cli">
+gptfdisk>d [enter]<br></br>
+1 [enter]
+</p>
+ 
+<img class="align" src="resources/partition_lwvm_table-gptfdisk_delete_initial_partitions.png">
+ 
+Note that the partition aren't officially deleted until you write changes.
+
+<br></br>
+
+<br></br>
+
+Re-create the System partition with the new size you want it to be. I will set it to 3.2 GB, as mentioned before in this writeup.
+
+<p class="cli">
+gptfdisk>n [enter]
+</p>
+
+The first sector should be keep as default.
+<p class="cli">
+[enter]
+</p>
+ 
+The last sector is where the partition must ends on the logical disk. We already know how much logical sectors our resized System partition will use, we calculated it previously. Our number of logical sectors for System partition is 419430.
+<br></br>
+Add the default first sector value (this number is the currently allocated number of blocks) : 419430 + 4 = 419434 and give this value to GPTfdisk.
+
+<p class="cli">
+[enter]
+</p>
+
+Keep the default Hex code.
+
+<p class="cli">
+[enter]
+</p>
+
+<img class="align" src="resources/partition_lwvm_table-gptfdisk_recreate_system_partition.png">
+ 
+Eventually, we will resize the LwVM container of the System partition using hfs_resize to fit the size set on the GPT.
+<br></br>
+Set <span class="cli">System</span> as partition name :
+
+<p class="cli">
+gptfdisk>c [enter]<br></br>
+1 [enter]<br></br>
+System [enter] 
+</p>
+
+<img class="align" src="resources/partition_lwvm_table-gptfdisk_set_name_system.png">
+ 
+The original System partition had no attribute fields set, so we have no changes to do there as they are all set to 0 by default. We now have to restore the original System partition GUID.
+<br></br>
+Go to gptfdisk expert mode.
+
+<p class="cli">
+gptfdisk>x [enter]
+</p>
+ 
+Enter the following commands to restore the partition GUID.
+
+<p class="cli">
+c [enter]<br></br>
+1 [enter]<br></br>
+[GUID] [enter]
+</p>
+
+<img class="align" src="resources/partition_lwvm_table-gptfdisk_restore_guid_system_partition.png">
+ 
+Go back to gptfdisk basic mode.
+
+<p class="cli">
+gptfdisk>m [enter]
+</p>
+
+Re-create the data partition with the same size that you set previously using hfs_resize. It was 59914854400 bytes (55.8 GB) for my 64 GB iPad 2nd.
+
+<p class="cli">
+gptfdisk>n [enter]
+</p>
+
+The first sector should be keep as default.
+
+<p class="cli">
+[enter]
+</p>
+ 
+Take the size you have previously set in hfs_resize, then do the following maths.
+<br></br>
+Divide it by [block size] value :
+<br></br>
+59914854400 / 8192 = 7313825 blocks
+<br></br>
+Add the default first sector value (this number is the currently allocated number of blocks) : 419436 + 7313825 = 7733261
+<br></br>
+Give this value to GPTfdisk.
+
+<p class="cli">
+[enter]
+</p>
+
+Keep the default Hex code.
+
+<p class="cli">
+[enter]
+</p>
+
+<img class="align" src="resources/partition_lwvm_table-gptfdisk_recreate_data_partition.png">
+ 
+Rename the recreated partition to  <span class="cli">Data</span>.
+<p class="cli">
+gptfdisk>c [enter]
+ 
+2 [enter]
+ 
+Data [enter]
+</p>
+
+<img class="align" src="resources/partition_lwvm_table-gptfdisk_set_name_data.png">
+ 
+Verify that everything is right with the recreated partition :
+<p class="cli">
+gptfdisk>p [enter]
+</p>
+
+<img class="align" src="resources/partition_lwvm_table-gptfdisk_print_recreated_partitions.png">
+ 
+Seems all good, now let's restore Data partition attributes and properties.
+
+<br></br>
+The original Data partition had some attribute flags set to on. In order to make the recreated partition same as it was and avoid disk issues, we will put these flags to on for it.
+<br></br>
+Be sure you are in gptfdisk expert mode.
+<p class="cli">
+a [enter]<br></br>
+2 [enter]<br></br>
+48 [enter][enter]
+</p>
+
+Enter the following commands to restore the partition GUID.
+<p class="cli">
+c [enter]<br></br>
+2 [enter]<br></br>
+[GUID] [enter]
+</p>
+
+<img class="align" src="resources/partition_lwvm_table-gptfdisk_restore_guid_data_partition.png">
+
+Our data partition is now completely resized, time to verify we did it right before write the stuff to the GPT. Go back to gptfdisk basic mode :
+<p class="cli">
+gptfdisk>m [enter]
+</p>
+
+Verify that the data partition as been properly recreated and that is has the right size :
+
+<p class="cli">
+gptfdisk>p [enter]
+</p>
+
+<img class="align" src="resources/partition_lwvm_table-gptfdisk_print_recreated_partitions.png">
+
+Now the most dangerous thing of this writeup ever, write partition changes to disk.
+
+<p class="cli">
+gptfdisk>w [enter]<br></br>
+y [enter]
+</p>
+ 
+When new partition configuration is written, synchronize a few times :
+<p class="cli">
+iPad-k94ap# sync;
+iPad-k94ap# sync;
+iPad-k94ap# sync;
+</p>
+
+<img class="align" src="resources/partition_lwvm_table-sync_cmd.png">
+ 
+Shortly after the new partition configuration is written, your device might become unstable or completely frozen. Don't worry, a simple reboot (or hard reset if you can't reboot normally) should bring your device back to a working state.
+
+<br></br>
+
+<br></br>
+
+Execute gptfdisk with the disk volume rdisk0s1 as argument.
+
+<p class="cli">iPad-k94ap#gptfdisk /dev/rdisk0s1</p>
+ 
+verify that our current partitions were properly resized.
+<p class="cli">gptfdisk>p</p>
+ 
+<img class="align" src="resources/partition_lwvm_table-gptfdisk_print_recreated_partitions.png">
+ 
+You should see that System has 3.2 GB size and Data has 55.8 GB size.
+<br></br>
+Outside gptfdisk, you will notice that our System partition still has 1.6 GB total capacity but we set it to 3.2 GB using gptfdisk.
+iPad-k94ap#df -h
+
+<img class="align" src="resources/partition_lwvm_table-df_before_hfsresize_system.png">
+
+The reason of why some space is still unallocated is that we only have resized the partition within the GPT, not the LwVM container itself. Using hfs_resize, we can grow up the LwVM container according to the unallocated space we have in the GPT partition. Note that the maximum size we can set must be lower or equal than the size we allocated to the partition created using gptfdisk.
+<br></br>
+We previously set /dev/rdisk0s1s1 (System) to 3435970560 bytes.
+
+<p class="cli">iPad-k94ap#hfs_resize / 3435970560</p>
+
+<img class="align" src="resources/partition_lwvm_table-hfsresize_system_partition.png">
+ 
+Check using df command that we now have the desired size.
+<img class="align" src="resources/partition_lwvm_table-df_after_hfsresize_system.png">
+
+Now let's create the exploitation partition.
+
+Execute again gptfdisk with the disk volume rdisk0s1 as argument.
+<p class="cli">iPad-k94ap#gptfdisk /dev/rdisk0s1</p>
+ 
+Default partition table can only hold two partitions, we will expand it to allow creating more partitions.
+<p class="cli">
+gptfdisk>x [enter]<br></br>
+s [enter]<br></br>
+4 [enter] 
+</p>
+
+The partition table should now accepts more than two partitions. We will now create a third partition called <span class="cli">Exploit</span>.
+
+<p class="cli">
+gptfdisk>n [enter]<br></br>
+3 [enter]<br></br>
+Keep default first sector [enter]
+</p>
+
+We calculated previously the size of this new partition, the size we set was 671088640 bytes.
+<br></br>
+Divide it by [block size] value to obtain how many logical sectors will be required.
+<br></br>
+671088640 bytes / 8192 = 81920 sectors needed.
+<br></br>
+Add those sectors to the minimal sector position we can set for the new partition.
+<br></br>
+7733264 + 81920 = 7815184
+<p align="justify">
+The last sector number we calculated for our partition at the last position might be greater than the maximum last sector value allowed by gptfdisk for our current partition configuration. This is expected, because we did not include the sectors used for storing partition configuration when we calculated sizes at the beginning.
+This is also very important to keep at least five unused sectors from the maximum last sector value allowed by gptfdisk for the last partition because gptfdisk or LwVM might not apply the changes.
+</p>
+Give this value to gptfdisk
+
+<p class="cli">
+[enter]
+</p>
+Keep the default Hex code.
+
+<p class="cli">
+[enter]
+</p>
+
+<img class="align" src="resources/partition_lwvm_table-gptfdisk_create_exploit_partition.png">
+
+Rename the recreated partition to "Exploit" :
+<p class="cli">
+gptfdisk>c [enter]<br></br>
+3 [enter]<br></br>
+Exploit [enter]
+</p>
+
+This new partition does not need any special attributes, so we are ready to write it to disk.
+
+<p class="cli">
+gptfdisk>w [enter]<br></br>
+y [enter]
+</p>
+ 
+When new partition configuration is written, synchronize a few times :
+<p class="cli">
+iPad-k94ap# sync<br></br>
+iPad-k94ap# sync<br></br>
+iPad-k94ap# sync
+</p>
+
+Verify that new disk devices were properly created :
+<p class="cli">
+iPad-k94ap#ls /dev/ | grep rdisk
+</p>
+ 
+You should see exactly five disk devices.
+<ul>
+<li><span class="cli">/dev/rdisk0</span> (LwVM device)</li>
+<li><span class="cli">/dev/rdisk0s1</span> (LwVM provided GPT)</li>
+<li><span class="cli">/dev/rdisk0s1s1</span> (System)</li>
+<li><span class="cli">/dev/rdisk0s1s2</span> (Data)</li>
+<li><span class="cli">/dev/rdisk0s1s3</span> (Exploit)</li>
+</ul>
+
+<br></br>
+
+<center><a href="set_hfsreadblock_wrapper.html" class="menu"><b>> Part 6:</b> Set HFSReadBlock() wrapper</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2020 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

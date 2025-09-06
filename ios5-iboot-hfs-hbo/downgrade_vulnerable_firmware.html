@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS 5.x HFS+ Heap Buffer Overflow - Downgrade back to a vulnerable firmware</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Downgrade back to a vulnerable firmware</h1>
+
+<p align="justify">
+The latest firmware available for iPad 2nd (K94AP) is iOS 9.3.5, which comes with a fixed iBoot. We will downgrade back our device to iOS 5.0.1 using SHSH blobs to get back a vulnerable signed iBoot installed on the device.
+<br></br>
+Jailbreak iOS 9.3.5 using <a href="https://www.phoenixpwn.com/">Phoenix</a> application. You will have to sideload it manually using xcode and a free iOS developer account, Cydia Impactor does not work anymore. This jailbreak enables <span class="cli">task_for_pid0</span> on the kernel, so you can run kloader with a patched iBSS.
+<br></br>
+Developer <a href="https://twitter.com/tihmstar">@tihmstar</a> made a tool to make the process of setting up kloader faster, called <span class="cli">kdfuapp</span>. Add his Cydia repository (http://repo.tihmstar.net) then install this tool.
+<br></br>
+Plug your device to computer. Run kdfuapp from springboard, then turn on all the switches. Press the "Enter kdfu mode" button then look at your device jumping back to a pwned iBSS after pressing the home button. In fact, you will only see a back, no-light screen. However, you should hear a device plugged sound on the computer.
+<br></br>
+Using futurerestore (<a href="https://twitter.com/tihmstar">@tihmstar</a>), downgrade back your device to iOS 5.0.1 using cached SHSH blobs.
+<p class="cli">futurerestore_macos -t blobs.shsh --use-pwndfu --no-baseband iPad2,2_5.0.1_9A405_Restore.ipsw</p>
+
+<img class="align" src="resources/downgrade_vuln_fw-futurerestore_launch.png">
+
+<p align="justify">
+Futurerestore automatically patches iBSS and iBEC using <a href="https://twitter.com/ih8sn0w">@ih8sn0w</a>'s iBoot32Patcher, boot to restore ramdisk then start the restore process.
+<br></br>
+If nothing has failed during the file systems creation and the iOS system .dmg image restore, the restore daemon eventually proceed to flash signed iOS 5.0.1 low-level images into <span class="cli">nand_firmware</span>.
+ 
+<img class="align" src="resources/downgrade_vuln_fw-futurerestore_flashing_nand_fw.png">
+ 
+After, the restore daemon tries to update the baseband firmware. We instructed futurerestore to disable baseband flashing. However, it seems that the restore daemon still enters that routine and requests signatures from TSS for an unknown baseband firmware. This makes the restore process to stop and return an error code.
+ 
+<img class="align" src="resources/downgrade_vuln_fw-futurerestore_bb_error.png">
+
+The device will reboot in recovery mode and you will probably notice that the device screen now shows iOS 5.x recovery logo. The old iOS 5.0.1 bootchain should have been flashed into nand_firmware before the restore daemon return an error attempting to flash the baseband firmware.
+<br></br>
+Bootlooped ? yes. Need to restore to latest firmware and try again ? no.
+<br></br>
+
+<br></br>
+Back in 2011, the iOS 5.x bootchain was vulnerable to a re-restore bug. A re-restore bug is a vulnerability in the restore process that can be used to downgrade or upgrade iOS using cached SHSH blobs, without having to boot pwned (for example using kloader or a low-level exploit).
+This re-restore bug allows restoring any 5.x firmwares from a 5.x low-level bootchain. In other words, we are able to jump to a signed iBEC from an iOS 5.x iBoot without being blocked by nonce checks.
+From this, we will be able to start again the restore process, but this time with a tweaked iOS 5.0.1 .ipsw file.
+<br></br> 
+</p>
+Extract the iOS 5.0.1 .ipsw firmware file using unzip command or MacOS Archive Utility.
+<p class="cli">mkdir iPad2,2_5.0.1_9A405_Restore</p>
+<p class="cli">unzip -d ./iPad2,2_5.0.1_9A405_Restore</p>
+
+<img class="align" src="resources/downgrade_vuln_fw-futurerestore_extract_ipsw.png">
+ 
+Extract the full iOS 6.1.3 .zip OTA firmware file using unzip command or MacOS Archive Utility.
+<p class="cli">mkdir iPad2,2_6.1.3_OTA</p>
+<p class="cli">unzip -d ./iPad2,2_6.1.3_OTA/ ./bbfca2293088712e39f58caf76708fbd6a53e7a7.zip</p>
+ 
+<img class="align" src="resources/downgrade_vuln_fw-extract_ota.png">
+ 
+From the extracted full iOS 6.1.3 OTA folder we named iPad2,2_6.1.3_OTA, go to Firmware folder. Copy from ./iPad2,2_6.1.3_OTA/Firmware folder those three files to ./iPad2,2_5.0.1_9A405_Restore/Firmware.
+<ul>
+<li>ICE3_04.12.05_Boot_02.13.Release.bbfw</li>
+<li>ICE3_04.12.05_Boot_02.13.Release.plist</li>
+<li>ICE3_04.12.05.Release.bin</li>
+</ul>
+
+<img class="align" src="resources/downgrade_vuln_fw-futurerestore_copy_ios6_bb.png">
+ 
+We now need to edit the ipsw BuildManifest file to use this 04.12.05 (iOS 6.1.3) signed baseband firmware instead of the old unsigned 04.11.08 (5.0.1) one.
+<br></br>
+Put <span class="cli">./iPad2,2_6.1.3_OTA/BuildManifest.plist</span> side-by-side of <span class="cli">./iPad2,2_5.0.1_9A405_Restore/BuildManifest.plist</span> like this.
+
+<img class="align" src="resources/downgrade_vuln_fw-buildmanifest_side_by_side.png">
+ 
+Replace the following attributes in the iOS 5.0.1 BuildManifest.plist file by the same attribute of the 6.1.3 OTA BuildManifest.plist file.
+<ul>
+<li>Root/BuildIdentities/Item0/Manifest/BasebandFirmware/Info/Path</li>
+<li>Root/BuildIdentities/Item0/Manifest/BasebandFirmware/ModemStack-Digest</li>
+<li>Root/BuildIdentities/Item0/Manifest/BasebandFirmware/ModemStack-Length</li>
+<li>Root/BuildIdentities/Item0/Manifest/BasebandFirmware/ModemStack-SecPackDigest</li>
+<li>Root/BuildIdentities/Item0/Manifest/UniqueBuildID</li>
+</ul>
+
+<img class="align" src="resources/downgrade_vuln_fw-buildmanifest_modify_1.png">
+
+<img class="align" src="resources/downgrade_vuln_fw-buildmanifest_modify_2.png">
+Save the edited BuildManifest.plist file.
+<p align="justify">
+Before rebuild the iOS 5.0.1 .ipsw file, let's prepare the <span class="cli">nand_firmware</span> for the post-exploitation.
+After the vulnerability is properly exploited, we make the code run a custom shellcode that will perform jump to another iBoot version (ex. the one of iOS 9.3.5). This new iBoot has to be obviously patched for signature checks in order to properly load boot components (DeviceTree, kernel) for the new iOS version.
+Since iBoot searches for images to load from <span class="cli">nand_firmware</span>, we also have to patch images <span class="cli">TYPE</span> to search to avoid conflicting with iOS 5.0.1 flashed images. Refer to my iOS multiboot writeup for details about flashing additional images into <span class="cli">nand_firmware</span>.
+Another thing is that it will be easier to flash additional images in <span class="cli">nand_firmware</span> while we are restoring the device because flashing them from userland is not easy and such operations will modify exploit offsets for sure (ex. shift heap buffer because of nvram changes).
+</p>
+To boot your device to iOS userland, you need provide to iBoot at least those two images.
+<ul>
+<li>DeviceTree</li>
+<li>Kernelcache</li>
+</ul>
+<p align="justify">
+The boot logo and recovery mode logo images are not necessary, they are more there to add a touch of fashion.
+Once you are doing the post-exploitation, you might want to be able to easily switch between iOS versions without having to re-flash the <span class="cli">nand_firmware</span> (which is risky as I said above). Only DeviceTree image is actually flashed, kernelcache is stored on the filesystem and can be easily replaced.
+If you know exactly which iOS version you plan to install for post-exploitation, adjust the steps below considering this. Otherwise, I suggest you to flash at least the DeviceTree of each major iOS updates. The DeviceTree image is not large in size, you can easily flash multiple ones beside the main bootchain.
+<br></br>
+
+<br></br>
+Go back to your iOS 5.0.1 work folder where the .ipsw files you previously downloaded are stored. Again, I strongly recommand to shasum hash them and compare results with theiphonewiki in order to verify their integrity.
+If shasum hashes matches, extract the content of downloaded ipsw files using unzip command or MacOS Archive Utility.
+<br></br>
+<img class="align" src="resources/downgrade_vuln_fw-extract_ios6_ipsw_1.png">
+<img class="align" src="resources/downgrade_vuln_fw-extract_ios6_ipsw_2.png">
+</p>
+Using xpwntool, decrypt the DeviceTree image located in
+<br></br><span class="cli">./[Extracted .ipsw file]/Firmware/all_flash/all_flash.k94.production/DeviceTree.[...].img3</span><br></br>
+of each extracted .ipsw files you plan to use further in the post-exploitation.
+
+<p class="cli">pmbonneau-mac#xpwntool [encrypted .img3 file] [decrypted output .img3 file] -iv [IV] -k [KEY] -decrypt</p>
+
+<p align="justify">
+For example, iOS 6.1.3 DeviceTree decryption.
+<img class="align" src="resources/downgrade_vuln_fw-decrypt_ios6_devicetree.png">
+Note that image decryption is not required because AES GID key will still be enabled after iBoot is exploited. I recommend you to decrypt them because this will make our work easier.
+<br></br>
+Open each decrypted images in a hex editor. If you see some readable strings such as model number (ex. K94AP), DeviceTree image is properly decrypted.
+<br></br>
+Edit current image type in the IMG3 header and also img3 TYPE tag value by following the method presented there <a href="https://www.pmbonneau.com/multiboot/flashing_nand_firmware.html">https://www.pmbonneau.com/multiboot/flashing_nand_firmware.html</a> to flash multiple distinct bootchains into <span class="cli">nand_firmware</span>.
+<br></br>
+Default img3 <span class="cli">TYPE</span> tag for DeviceTree is <span class="cli">dtre</span>.
+ 
+<img class="align" src="resources/downgrade_vuln_fw-devicetree_dtre.png">
+
+Change it to <span class="cli">dtrb</span>.
+ 
+<img class="align" src="resources/downgrade_vuln_fw-devicetree_dtrb.png">
+ 
+Save the image file.<br></br>
+Move it to <span class="cli">./iPad2,2_5.0.1_9A405_Restore/Firmware/all_flash/all_flash.k94.production</span> folder of your extracted iOS 5.x ipsw file.
+
+<img class="align" src="resources/downgrade_vuln_fw-mv_devicetree_allflash.png">
+</p>
+Decrypt and change default img3 TYPE tag for all other DeviceTree images you will flash into nand_firmware, following this pattern.
+<ul>
+<li>Main DeviceTree image (iOS 5.0.1) : dtre</li>
+<li>Second DeviceTree image (iOS 6.1.3) : dtrb</li>
+<li>Third DeviceTree image (iOS 7.1.2) : dtrc</li>
+<li>Fourth DeviceTree image (iOS 8.4.1) : dtrd</li>
+<li>Fifth DeviceTree image (iOS 9.3.5) : dtrf</li>
+</ul>
+
+<p align="justify">
+Note that we skip "e" for the fifth DeviceTree image because it would conflict with the main DeviceTree image and cause unexpected behaviors.
+<br></br>
+If you want to add some wow-effect to the post-exploitation, you may add some fancy custom bootlogo images. I will add the iOS 7.x and newer bootlogo (white uniform Apple logo) and my custom red dragonfly logo.
+</p>
+
+Using xpwntool, decrypt the bootlogo image located in
+<br></br><span class="cli">./[Extracted .ipsw file]/Firmware/all_flash/all_flash.k94.production/applelogo.[...].img3</span><br></br>
+of the extracted .ipsw files you want to get the bootlogo.
+
+<p class="cli">pmbonneau-mac#xpwntool [encrypted .img3 file] [decrypted output .img3 file] -iv [IV] -k [KEY] -decrypt</p>
+
+<p align="justify">
+For example, iOS 7.1.2 bootlogo decryption.
+<img class="align" src="resources/downgrade_vuln_fw-decrypt_ios7_applelogo.png">
+Default img3 TYPE tag for bootlogo is <span class="cli">logo</span>, change it for <span class="cli">logb</span> using hexeditor then save the edited file.
+<br></br>
+You might also want to add a custom bootlogo for an epic boot visual. The easiest way I found to pack a .png or .jpg image file into a .img3 was to use <b>Sn0wbreeze</b>, set device as iPhone 3Gs (old BootROM), build the custom .ipsw then extract the custom bootlogo .img3 file from it.
+</p>
+
+Follow a similar pattern than the one for devicetree image to name TYPE tags.
+<ul>
+<li>Main bootlogo image (iOS 5.0.1, old skeuomorphic Apple logo look) : logo</li>
+<li>Second bootlogo image (iOS 7.1.2, new flat-design Apple logo look) : logb</li>
+<li>Third bootlogo image (custom, red dragonfly logo) : logc</li>
+</ul>
+
+<br></br>
+To distinct the stock bootchain and the patched one, I suggest you to flash some recoverylogo images as well. Otherwise, when your pwned bootchain will run, you will see the iOS 5.x recoverylogo on the screen. This might be a little confusing.
+<br></br>
+Using xpwntool, decrypt the recovery mode logo image located in
+<br></br><span class="cli">./[Extracted .ipsw file]/Firmware/all_flash/all_flash.k94.production/recoverymode.[...].img3</span><br></br>
+of the extracted .ipsw files you want to get the recovery mode logo.
+<p class="cli">pmbonneau-mac#xpwntool [encrypted .img3 file] [decrypted output .img3 file] -iv [IV] -k [KEY] -decrypt</p>
+ 
+<img class="align" src="resources/downgrade_vuln_fw-decrypt_ios6_recoverylogo.png">
+ 
+Default img3 TYPE tag for recovery mode logo is <span class="cli">recm</span>, change it for <span class="cli">recb</span> using hexeditor then save the edited file. For this writeup, I will flash recovery mode logo for every major firmware releases.
+<br></br>
+Follow a similar pattern than the one for devicetree image to name TYPE tags.
+<ul>
+<li>Main recovery mode logo image (iOS 5.0.1) : recm</li>
+<li>Second recovery mode logo image (iOS 6.1.3) : recb</li>
+<li>Third recovery mode logo image (iOS 7.1.2) : recc</li>
+<li>Fourth recovery mode logo image (iOS 8.4.1) : recd</li>
+<li>Fifth recovery mode logo image (iOS 9.3.5) : recf (we skip "e" to avoid confusion).</li>
+</ul>
+
+The final nand_firmware setup should looks like this.
+<ul>
+<li>Main DeviceTree image (iOS 5.0.1) : dtre</li>
+<li>Second DeviceTree image (iOS 6.1.3) : dtrb</li>
+<li>Third DeviceTree image (iOS 7.1.2) : dtrc</li>
+<li>Fourth DeviceTree image (iOS 8.4.1) : dtrd</li>
+<li>Fifth DeviceTree image (iOS 9.3.5) : dtrf</li>
+<li>Main bootlogo image (iOS 5.0.1) : logo</li>
+<li>Second bootlogo image (iOS 7.1.2) : logb</li>
+<li>Third bootlogo image (custom) : logc</li>
+<li>Main recovery mode logo image (iOS 5.0.1) : recm</li>
+<li>Second recovery mode logo image (iOS 6.1.3) : recb</li>
+<li>Third recovery mode logo image (iOS 7.1.2) : recc</li>
+<li>Fourth recovery mode logo image (iOS 8.4.1) : recd</li>
+<li>Fifth recovery mode logo image (iOS 9.3.5) : recf</li>
+</ul>
+<img class="align" src="resources/downgrade_vuln_fw-allflash_folder_final.png">
+Locate the manifest file into <span class="cli">./iPad2,2_5.0.1_9A405_Restore/Firmware/all_flash/all_flash.k94.production</span> folder, then open it using a text editor. The manifest file contains a list of images that will be flashed into <span class="cli">nand_firmware</span> during the restore process.
+<br></br>
+Add filenames at the bottom of the manifest file, then save it.
+ 
+<img class="align" src="resources/downgrade_vuln_fw-allflash_manifest_edit.png">
+
+<p align="justify">
+We are now ready to re-pack our custom iOS 5.0.1 restore .ipsw file. Go to the root of the extracted original .ipsw file, <span class="cli">./iPad2,2_5.0.1_9A405_Restore/</span> and compress all the files in a .zip archive. You can use MacOS built-in Archive Utility.
+<img class="align" src="resources/downgrade_vuln_fw-futurerestore_extract_ipsw.png">
+Backup the original iOS 5.0.1 .ipsw file somewhere else on your computer, then rename the Archive.zip to iPad2,2_5.0.1_9A405_Restore.ipsw (we keep the original file name).
+</p>
+Use iDeviceRestore to re-restore iOS 5.0.1 using the custom .ipsw file we have just created. Put your device in recovery mode (iBoot) and execute the following command.
+
+<p class="cli">pmbonneau-mac#idevicerestore -e -d -w iPad2,2_5.0.1_9A405_Restore.ipsw</p>
+ 
+*** iDeviceRestore Missing screenshot ***
+
+<br></br>
+The restore process should start, device will jump to the signed iBEC from recovery mode without requiring a nonce. During the flash <span class="cli">nand_firmware</span> images routine, you should see the additional images we set in the manifest being flashed like on the screenshots above. If the restore process return an error, verify that the images you added are well named and there's no .img3 TYPE tags conflicts.
+<img class="align" src="resources/downgrade_vuln_fw-idevicerestore_reading_flash_images_1.png">
+<img class="align" src="resources/downgrade_vuln_fw-idevicerestore_reading_flash_images_2.png">
+
+<p align="justify">
+After writing images into <span class="cli">nand_firmware</span>, the restore process starts to flash the baseband firmware according to the values we have set in the <span class="cli">BuildManifest.plist</span> file when we built the custom downgrade .ipsw file. If everything was correctly set, restore process should return done then reboot the device.
+If your device is booting in Soft-DFU or recovery mode, you might have a conflict within images flashed into <span class="cli">nand_firmware</span>. Verify that you have correctly set IMG3 type for every additional images that are intended to be flashed because two of the same type might confuse the parent bootloader and obviously cause unexpected behaviors.
+Otherwise, your device will boot to iOS 5.x initial setup application. Before going further, I strongly recommand you to verify if all additional images were correctly flashed into <span class="cli">nand_firmware</span>. To see which images iBoot is able to parse from, a serial (UART) cable is required.
+<br></br>
+
+<br></br>
+To communicate with the iOS device from serial, you need proper UART drivers for your cable and also a console program. In most cases, UART drivers should be built-in within the operating system.
+</p>
+
+To see if UART drivers for your cable are installed, plug your it into the USB port of your computer then check if you can see the cable device show up in <span class="cli">/dev</span> folder.
+<p class="cli">pmbonneau-mac#ls /dev/ | grep cu.*</p>
+If there is no new <span class="cli">cu.*</span> device appearing in <span class="cli">/dev</span> folder after the cable is plugged, UART drivers for that cable need to be installed. This was my case with OS X Mavericks 10.9, I had to install the UART driver then reboot my computer before the cable was detected. Newer OS X versions seems to have it built-in.
+For the console program, I suggest you use termz from @Qwertyuiop because the output is very clear.
+<p class="cli">pmbonneau-mac#git clone https://github.com/kpwn/termz.git</p>
+<p class="cli">pmbonneau-mac#make<p>
+ 
+To use termz, simply run it with the UART device path of your cable.
+<p class="cli">pmbonneau-mac#./termz /dev/cu.[UART device ID]</p>
+ 
+By default, you won't see any serial output from your iOS device because debug-uarts is not enabled. To enable it, do the following.
+<br></br>
+Boot your iOS device in recovery mode (iBoot) by holding home button with serial cable plugged in.
+<p class="cli">pmbonneau-mac#irecovery -s</p>
+<p class="cli">irecovery>setenv debug-uarts 3</p>
+<p class="cli">irecovery>saveenv</p>
+<p class="cli">irecovery>reboot</p>
+ 
+Once device is rebooting, you should see iBoot serial output in termz.
+ 
+<p align="justify">
+Somewhere at the beginning of the serial output log, you should see some info related to <span class="cli">nand_firmware</span> images parsed by the bootloader.
+<img class="align" src="resources/downgrade_vuln_fw-termz_serial_nand_firmware_images.png">
+ 
+If you see all additional img3 types we set while we created the custom downgrade .ipsw file, images were properly flashed into <span class="cli">nand_firmware</span> and iBoot can parse them. Otherwise, if some are missing, you might have a type conflict or there was not enough space in <span class="cli">nand_firmware</span> for all flashed images.
+<br></br>
+Once device is rebooted, follow the initial setup. First, verify that the device can read its IMEI number by tapping the circle "?" button at the bottom of the welcome screen. If you see no IMEI, there's something wrong with the baseband at first look. The activation process will help to see if the baseband is properly working. If the device can't activate (stays in an infinite loop), this is probably because your baseband is corrupted. You will have to verify that your <span class="cli">buildmanifest.plist</span> baseband signing data is correct and if firmware files stayed intact. If everything is okay, you should reach the iOS home screen.
+<br></br>
+Congratulations, you device is now downgraded to a firmware that can be potentially used to install any other iOS firmwares released for that device.
+</p>
+
+<br></br>
+<center><a href="prepare_device_workspace.html" class="menu"><b>> Part 4:</b> Prepare on-device workspace</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2020 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

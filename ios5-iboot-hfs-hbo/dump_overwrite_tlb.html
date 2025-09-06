@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS 5.x HFS+ Heap Buffer Overflow - Dump and overwrite TLB</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Dump and overwrite TLB</h1>
+
+<p align="justify">
+From the HFS wrapper output we get, the call that interests us is the one right before iBoot panics. This is the fifth call.
+</p>
+
+<img class="align" src="resources/trigger_hbo-hfsreadblock_wrapper_panic_translation_error.png">
+
+<p align="justify">
+From position 0x28e000 on the HFS partition, 0xFFD92000 bytes will be copied to 0x9FFB80C0 in device's memory.
+Interesting fact, 0xFFD92000 is 4292419584 bytes (around 4 GB).
+Let's have a look of how the memory is organized on the device when iBoot is running.
+</p>
+
+<p align="justify">
+We know from our previous image disassembly with Ghidra that our iOS 5.0.1 iBoot is running at 0x9FF00000 on iPad2,2 (A5). When our heap buffer overflow is trigerred, iBoot will start to copy around 4 GB of data from <span class="cli">Exploit</span> partition offset 0x28e000 and copy it back to memory address 0x9FFB80C0.
+The overflow goes forward in memory, replacing all data that comes beyond memory address 0x9FFB80C0 by however data is on the filesystem from 0x28e000. Eventually, it will overwrite on some important iBoot structures such as <span class="cli">TLB</span> (Translation Look-aside Buffer) which will eventually cause the bootloader to panic.
+</p>
+
+From Joshua Hill's (p0sixninja) writeup about this iBoot exploit, we can learn the following about the TLB.
+
+<p align="justify">
+	<q>
+		<i>The TLB is a specialized cache that holds a table of physical addresses which are mapped to virtual addresses in the system memory. In iBEC this structure starts at address 0x5FFF8000. This would make since because reason for the crash from the report states "Domain Error". A little research in the ARM technical reference shows that this happens when an illegal virtual to physical page mapping is attempted to be looked up. The TLB is essentially one 32bit address containing representing each physical to virtual mapping on the system.</i>
+	</q>
+</p>
+
+<p align="justify">
+Note that Joshua's exploit implementation has been done on a different device and using iBEC instead of iBoot like we are doing, so we must change <q><i>In iBEC this structure starts at address 0x5FFF8000</i></q> to <q><i>in iBoot this structure starts at address 0x9FFF8000</i></q>.
+</p>
+
+<p align="justify">
+On both secondry stage bootloaders (iBoot and iBEC), the TLB is always located at [baseaddr] + 0xF8000. The TLB will be located at 0x9FF00000 + 0xF8000 = 0x9FFF8000 on our iOS 5.0.1 iBoot for iPad2,2. Since 0x9FFF8000 is greater than 0x9FFB80C0 and we are attempting to write over 4 GB from 0x9FFB80C0, we will obviously destroy the TLB while iBoot is running. To be able to go further with this, we will write a copy of the TLB at a specific position in the filesystem. Then, we let iBoot overwrite the TLB in memory by a copy of the same TLB from filesystem when the heap buffer overflow is triggered.
+</p>
+
+<p align="justify">
+The TLB is a cache, it holds the latest virtual memory to physical memory translations done by the processor. It is built at run time, so this means that we will not be able to get it directly from the iBoot image binary. Instead, we will have to dump a copy of it from device's memory while iBoot is running using a payload called <span class="cli">memrw</span>. This payload can be used to read or write data in device memory at bootloader level, based on <a href="https://twitter.com/xerub">@xerub</a>'s iBoot payload development toolkit (also known as <a href="https://github.com/xerub/ibex">iBex</a>).
+</p>
+
+<p align="justify">
+Download <span class="cli">memrw</span> source code here, then unzip the archive.
+
+<br></br>
+
+<a href="https://www.pmbonneau.com/ios5-iboot-hfs-hbo/downloads/memrw.zip"><img src="resources/dump_overwrite_tlb-memrw_download_button.png"></a>
+
+<br></br>
+
+A folder named <span class="cli">memrw_src</span> will be extracted and it should contains the following files. I suggest you move <span class="cli">memrw_src</span> to our iOS 5.0.1 work folder.
+
+<img class="align" src="resources/dump_overwrite_tlb-memrw_payload_source_folder.png">
+
+Currently, this payload is designed to run on iOS 7.1.2 iBoot for the following devices.
+</p>
+
+<ul>
+	<li>iPhone 4 (3,1 - N90AP)</li>
+	<li>iPhone 4s (4,1 - N90AP)</li>
+	<li>iPad 2nd (2,2 - K94AP)</li>
+	<li>iPad 3rd (3,1 - J1AP)</li>
+</ul>	
+
+However, it can still unofficially run on most iBoot versions that are supported by similar hardware devices without any modifications.
+<ul>
+	<li>iPhone 4 (3,2 - N90BAP)</li>
+	<li>iPhone 4 (3,3 - N92AP)</li>
+	<li>iPad 2nd (2,1 - K93AP)</li>
+	<li>iPad 2nd (2,3 - K95AP)</li>
+	<li>iPad 3rd (3,2 - J2AP)</li>
+	<li>iPad 3rd (3,3 - J2AAP)</li>
+</ul>
+
+To compile the payload into an armv7 binary, you must use the arm toolchain we installed previously when we compiled the <span class="cli">HFSReadBlock()</span> wrapper. If you don't have it installed on your computer, please read the part 6 of this writeup for install instructions.
+
+Here are some particularities between <span class="cli">HFSReadWrapper()</span> payload and the <span class="cli">memrw</span> one.
+
+<span class="cli">HFSReadWrapper()</span> payload :
+<ul>
+	<li>Written in ARM assembly language</li>
+	<li>Functions in iBoot must be hooked properly (find offsets) regarding the target bootloader version</li>
+</ul>
+
+The <span class="cli">memrw</span> payload (iBex iBoot payload development toolkit) :
+<ul>
+	<li>Written in C language</li>
+	<li>Dynamically find functions offsets, this is why we are able run it on multiple iBoot version (with some limits thought).</li>
+</ul>
+
+Compile <span class="cli">memrw</span> the following way.
+
+Go to the <span class="cli">memrw_src</span> folder we've extracted previously, then invoke the <span class="cli">make</span> command.
+
+<p class="cli">pmbonneau-mac#make</p>
+
+<img class="align" src="resources/dump_overwrite_tlb-memrw_payload_make_1.png">
+
+<img class="align" src="resources/dump_overwrite_tlb-memrw_payload_make_2.png">
+
+The compiled ARM binary we need is the one named as <span class="cli">payload</span> (without the .elf file extension), move it to our iOS 5.0.1 work folder.
+
+<img class="align" src="resources/dump_overwrite_tlb-memrw_move_payload.png">
+
+<img class="align" src="resources/dump_overwrite_tlb-memrw_moved_payload.png">
+
+<p align="justify">
+In order to run the payload then dump the TLB live, we are going to patch iBoot <span class="cli">go</span> command handler address to 0x80000000 (which is loadaddr). The <span class="cli">go</span> command usually does the <span class="cli">prepare_and_jump()</span> routine.
+When you send a bootloader image over USB, <span class="cli">go</span> will do some stuff (such as remove img3 header then copy then image to loadaddr if I remember) then execute it. The loadaddr is the address (usually 0x80000000) for which images are placed to before they are booted.
+</p>
+
+<p align="justify">
+Use iH8sn0w's iBoot32patcher to redirect <span class="cli">go</span> command handler of iBoot. Important, use a stock decrypted iBoot image which is the same version as the signed iBoot we are working on the exploit. In our case, let's use an iOS 5.0.1 stock decrypted iBoot image.
+</p>
+
+<p class="cli">pmbonneau-mac#iBoot32Patcher iBoot.k94ap.RELEASE_dec.bin iBoot.k94ap.RELEASE_GoPayload.bin -c go 0x80000000</p>
+ 
+<img class="align" src="resources/dump_overwrite_tlb-ibootpatcher_go_cmd_1.png">
+ 
+<img class="align" src="resources/dump_overwrite_tlb-ibootpatcher_go_cmd_2.png">
+ 
+Send the patched iBoot to <span class="cli">/bootloaders</span> on the device using SCP.
+ 
+<p class="cli">pmbonneau-mac#scp -P 2022 iBoot.k94ap.RELEASE_GoPayload.bin root@localhost:/bootloaders</p>
+ 
+<img class="align" src="resources/dump_overwrite_tlb-scp_patched_iboot_go_cmd_1.png">
+ 
+<img class="align" src="resources/dump_overwrite_tlb-scp_patched_iboot_go_cmd_2.png">
+
+<p align="justify">
+Run the patched iBoot using kloader.
+</p>
+
+<p class="cli">ipad-k94ap#kloader /bootloaders/iBoot.k94ap.RELEASE_GoPayload.bin</p>
+
+<img class="align" src="resources/dump_overwrite_tlb-kloader_patched_iboot_go_cmd.png">
+
+<p align="justify">
+iBoot should be executed shortly after.
+</p>
+
+<img class="align" src="resources/dump_overwrite_tlb-iboot_console.png">
+
+<p align="justify">
+You will need both serial (termz) and usb (irecovery) consoles to dump TLB the old good way. :^)
+</p>
+
+<p align="justify">
+Using a serial cable, open termz console with the proper <span class="cli">/dev/cu.</span> device like we did previously.
+</p>
+
+Start also a console session on iBoot using iRecovery.
+ 
+<p class="cli">pmbonneau-mac#irecovery -s</p>
+ 
+Send the memrw payload binary to iBoot.
+ 
+<p class="cli">irecovery>/send memrw</p>
+ 
+Execute the payload this way.
+ 
+<p class="cli">irecovery>go [mread/mwrite] [start address] [count]</p>
+ 
+The TLB is located at 0x9FFF8000 and it is 0x4000 (16KB length).
+ 
+<p class="cli">irecovery>go mread 0x9FFF8000 0x4000</p>
+
+<img class="align" src="resources/dump_overwrite_tlb-memrw_mread_cmd.png">
+ 
+From termz console, you should see iBoot reading 16KB of data from its memory. It will end with "Read OK".
+ 
+<img class="align" src="resources/dump_overwrite_tlb-termz_memrw_mread_output.png">
+ 
+Note that the data output will also be visible from the irecovery console, but it is less reliable than serial.
+
+<img class="align" src="resources/dump_overwrite_tlb-irecovery_memrw_mread_output.png">
+ 
+Copy all the dumped bytes from the serial console (termz) to clipboard.
+
+<img class="align" src="resources/dump_overwrite_tlb-termz_memrw_mread_select.png">
+ 
+<img class="align" src="resources/dump_overwrite_tlb-termz_memrw_mread_copy.png">
+
+<p align="justify">
+Create a blank file of [TLB size]+[Block size] using dd, were TLB size is 16384 (2 blocs of 8192 bytes) and Block size is 8192 (1 bloc of 8192 bytes).
+</p>
+
+<p class="cli">pmbonneau-mac#dd if=/dev/zero of=iBoot.k94ap.TLB_[heap buffer address].bin bs=8192 count=3</p>
+
+<img class="align" src="resources/dump_overwrite_tlb-dd_create_tlb_empty_file.png">
+
+<p align="justify">
+As I mentionned briefly in the introduction of this writeup, some changes to nvram and disk partitions will shift the heap buffer. There's also some other factors beside of those two that could do unexpected behaviour related to shifting the heap buffer address. In most cases, if not all, this will lead to a misalignment of offsets resulting in an awful death of your exploit implementation.
+You will have to re-align TLB, overwritten iBoot, exploit shellcode and new iBoot image again to get things working as before. This is why I usually add <span class="cli">_[heap buffer address]</span> to data blocks I'm going to write into the <span class="cli">Exploit</span> partition using dd command. In my case, the heap buffer address currently set on my iPad 2nd is 0x9FFB80C0. We get it from the fifth call of the <span class="cli">HFSReadBlock()</span> wrapper, the one before panic occures.
+</p>
+
+<p align="justify">
+Using a hex editor, open the file iBoot.k94ap.TLB_[heap buffer address].bin you have previously created. Before paste the dumped TLB bytes into this file, we must calculate the following offsets.
+</p>
+
+<ul>
+	<li><p align="justify">The exact position for which we will have to write our three [block size] sized blocks in the <span class="cli">Exploit</span> partition.</p></li>
+	<li><p align="justify">The exact position for which we will write the dumped TLB data in those three blocks. The maths we are going to do in order to align our dumped TLB data with the TLB of the current running iBoot instance will most likely end up with a remainder. We can't just paste the data at 0x0 in the blocks we will write back to the <span class="cli">Exploit</span> partition, because the data will not be properly aligned and some unexpected behavior might happen.</p></li>
+</ul>
+
+<p align="justify">
+Let's calculate the exact position for which we will have to write our three [block size] sized blocks for the TLB in the <span class="cli">Exploit</span> partition. The next calculations will be based on the following two-steps procedure.
+</p>
+
+<ul>
+<li>Data we are writing (or overwriting)
+<p align="justify">
+From iBoot running memory, we know that TLB is located at [base address + 0xF8000]. In the case of my iPad 2nd (K94AP), TLB is located at 0x9FFF8000.
+</p>
+</li>
+
+<li>Our HFSReadBlock() wrapper output
+<p align="justify">
+HFSReadBlock: offset [position on disk device] size [size of the read] buffer [position in device memory]
+</p>
+</li>
+</ul>
+
+<img class="align" src="resources/trigger_hbo-hfsreadblock_wrapper_panic_translation_error.png">
+ 
+Remember, we interprete this as follow:
+
+<p align="justify">
+From "offset", read "size" bytes into "buffer"
+</p>
+
+<p align="justify">
+For the TLB, we calculate the blocks position this way.
+</p>
+
+0x9FFF8000 - 0x9FFB80C0 = 0x3FF40
+
+<p align="justify">
+This how much bytes there is between our heap buffer address and the TLB in iBoot running memory. Now, we must calculate at which position we should write those blocks in the <span class="cli">Exploit</span> partition, to make iBoot HFS+ driver write them in the running memory at the right position when the heap buffer overflow is triggered. We already know that iBoot HFS+ driver starts to read bytes from our <span class="cli">Exploit</span> HFS+ filesystem at 0x28E000 ("offset") to running memory at 0x9FFB80C0 when the heap buffer overflow occures. We know this information from the last call of our <span class="cli">HFSReadBlock()</span> wrapper.
+</p>
+
+<img class="align" src="resources/dump_overwrite_tlb-hfs_read_wrapper_output.png">
+
+<p align="justify">
+So, if we want to know exactly at which position we must write back our TLB in the <span class="cli">Exploit</span> HFS+ filesystem, we must add 0x3FF40 (TLB offset in memory) to 0x28E000 (heap buffer overflow trigger point in the filesystem).
+</p>
+
+0x28E000 + 0x3FF40 = 0x2CDF40
+
+<p align="justify">
+In other words, the TLB must be written to 0x2CDF40 in our <span class="cli">Exploit</span> filesystem in order to be written to 0x9FFF8000 in running memory once the heap buffer overflow occures.
+</p>
+
+<p align="justify">
+Now, we must find which block 0x2CDF40 is on the filesystem by dividing by device [block size].
+</p>
+
+0x2CDF40 / 0x2000 = 0x166 (358)
+
+<p align="justify">
+We will have to write our TLB at block 358 in our <span class="cli">Exploit</span> filesystem. Before do this, we must block-size align the data we will put in the three empty block we previously created using dd. The issue we have there is that 0x2CDF40 can't be divided by [block size] value without a remainder.
+</p>
+
+For example, 0x2CDF40 (2977408) / 0x2000 (8192) = 363,453125
+
+<p align="justify">
+We won't see the remainder if the calculator is set in hex mode. However, we can still find it out by doing the following maths.
+</p>
+
+<p align="justify">
+Note : the structure is the data contained in block we write in filesystem.
+</p>
+
+<p align="justify">
+[Position of our structure] - ([number of block between our structure and heap address] * [block size])
+</p>
+
+0x2CDF40 - (0x166 * 0x2000) = 0x2CDF40 - 0x2CC000 = 0x1F40
+
+<p align="justify"> 
+This means that we must add a padding of 0x1F40 bytes before our TLB data, at block 358. Open the empty 24 kilobytes (three blocks) iBoot.k94ap.TLB_[heap buffer address].bin file we created previously in a hex editor, then go to position 0x1F40.
+</p>
+
+<img class="align" src="resources/dump_overwrite_tlb-ihex-paste_tlb_data_position.png">
+ 
+Paste the TLB data we dumped from termz exactly at the position we've just calculated, 0x1F40 in this case.
+ 
+<img class="align" src="resources/dump_overwrite_tlb-ihex-paste_tlb_data.png">
+
+<br></br>
+
+<b>The TLB hack</b>
+
+<p align="justify">
+In his writeup about this iBoot exploit, @nyansatan said that the success rate of the exploit could be increased by directly mapping the physical iBoot base address to the virtual one in TLB. The physical address space in iBoot is from [iBoot base address] to ([iBoot base address] + [Device's RAM size]) - 0x1. The iPad 2nd (k94ap) has 512 megabytes of RAM memory, iBoot physical address space is from 0x9FF00000 to 0xBFEFFFFF.
+</p>
+
+<p align="justify">
+I calculated 0xBFEFFFFF this way.
+</p>
+
+<p>
+512 megabytes = 1024 * 1024 * 512
+</p>
+<p>
+512 megabytes = 536870912 bytes (0x20000000)
+</p>
+<p>
+0x9FF00000 + (0x20000000 - 0x1) = 0xBFEFFFFF
+</p>
+
+<p align="justify">
+Note, we substract 0x1 because we consider that 0x9FF00000 is like 0x0, and we have 512 megabytes of RAM, so 0x20000000 - 0x1 addresses available.
+</p>
+
+<p align="justify">
+From 0xBFF00000 is the beginning of iBoot virtual addresses space and what is interesting about it is that this is an exact replica of the physical address space. In other words, virtual address 0xBFF00000 contains the same value as physical address 0x9FF00000 (which is iBoot reset vector).
+This means that iBoot memory space is actually replicated at each [Device's RAM size] iterations. If we write something in the physical address space, the change will be considered in the virtual address space as well. This is also the same for the reverse case,  if we write something in the virtual address space, the change will be also considered in the physical address one.
+Eventually, we will use this fact to overwrite iBoot itself from the heap buffer overflow.
+</p>
+
+<p align="justify">
+Let's go back to the TLB, represent it as an array of 32 bytes integers like this [0xFFFFFFFF 0xFFFFFFFE 0xFFFFFFFD 0xFFFFFFFC 0xFFFFFFFB ...] as an example.
+</p>
+
+<ul>
+<li>TLB[0x0] = 0xFFFFFFFF</li>
+<li>TLB[0x1] = 0xFFFFFFFE</li>
+<li>TLB[0x2] = 0xFFFFFFFD</li>
+<li>TLB[0x3] = 0xFFFFFFFC</li>
+<li>TLB[0x4] = 0xFFFFFFFB</li>
+</ul>
+
+<p align="justify">
+From our dumped TLB data, look at TLB[0x0]. The value found at this address should be the same 32 bytes value as the one at TLB[iBoot base address / 0x100000]. To calculate a position in the TLB hexadecimal dump considering that this is a 32 byte array, you must multiply by four.
+</p>
+
+<p align="justify">
+For example, TLB[iBoot base address / 0x100000] would be at TLB[0x9FF00000 / 0x100000] = TLB[0x9FF], 0x9FF * 0x4 = 0x27FC in the TLB dump data.
+</p>
+
+<p align="justify">
+Important, we added some padding before our TLB dump data in our iBoot.k94ap.TLB_[heap buffer address].bin file to fit with device block size. This padding was 0x1F40 bytes, so we must add this to 0x27FC in order to get the correct position we are searching for in our iBoot.k94ap.TLB_[heap buffer address].bin file.
+</p>
+
+0x1F40 + 0x27FC = 0x473C
+
+<p align="justify">
+At 0x474C in our iBoot.k94ap.TLB_[heap buffer address].bin, we should get the value of TLB[0x9FF] which is 0x320CF0BF (0xBFF00C32 in byte reverse order). As explained before, we know that this is an address in the virtual memory space of iBoot. Our TLB hack consists of directly mapping the physical iBoot base address to the virtual one, so we will patch 0xBFF00C32 to 0x9FF00C32 in order to acheive this.
+</p>
+
+<img class="align" src="resources/dump_overwrite_tlb-ihex_patch_tlb_before.png">
+
+Replace 0x320CF0BF (0xBFF00C32) by 0x320CF09F (0x9FF00C32).
+
+<img class="align" src="resources/dump_overwrite_tlb-ihex_patch_tlb_after.png">
+
+Save the file, then upload it to <span class="cli">/exploit</span> on device using SCP.
+
+<img class="align" src="resources/dump_overwrite_tlb-scp_upload_tlb_container.png">
+
+From a SSH connection, edit the <span class="cli">exploit.sh</span> script using a text editor. Uncomment line <span class="cli">echo "Writing TLB..."</span> then add the following <span class="cli">dd</span> command.
+
+<p class="cli">dd if=iBoot.k94ap.TLB_[heap buffer address].bin of=/dev/rdisk0s1s3 bs=[block size] seek=[block position]</p>
+
+<img class="align" src="resources/dump_overwrite_tlb-exploit_bash_script_tlb_block.png">
+
+Remember, we set at which position to start writing data from by specifying the <span class="cli">seek</span> parameter to the <span class="cli">dd</span> command.
+
+I strongly recommand to completely obliterate the <span class="cli">Exploit</span> HFS+ filesystem before run the <span class="cli">exploit.sh</span> script again.
+
+<p class="cli">ipad-k94ap#dd if=/dev/zero of=/dev/rdisk0s1s3 bs=8192</p>
+
+<img class="align" src="resources/trigger_hbo-dd_zero_exploit_partition.png">
+
+<p align="justify">
+Once the <span class="cli">Exploit</span> partition is zero-ed, run the script. It should re-write HFS+ filesystem data blocks and TLB ones at their exact position into the partition.
+</p>
+
+Next, run the <span class="cli">iBoot.k94ap.RELEASE_HFSReadWrapper.bin</span> image.
+
+<p class="cli">ipad-k94ap#kloader /bootloaders/iBoot.k94ap.RELEASE_HFSReadWrapper.bin</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-kloader_iboot_hfsreadblock_wrapper.png">
+
+The iBoot image should run a few seconds after and you will see the output of our <span class="cli">HFSReadBlock()</span> wrapper. If TLB has been properly overwritten, iBoot should runs into panic and return an output message like this one.
+
+<img class="align" src="resources/dump_overwrite_tlb-iboot_panic_task_main_0x00000000.png">
+
+Please note that it might take some time (like 30 seconds or more) before iBoot runs into panic after we see the wrapper output.
+
+<br></br>
+<center><a href="overwrite_running_iboot.html" class="menu"><b>> Part 9:</b> Overwrite current running iBoot</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2020 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

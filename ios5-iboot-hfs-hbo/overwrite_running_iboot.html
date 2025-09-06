@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS 5.x HFS+ Heap Buffer Overflow - Overwrite current running iBoot</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Overwrite current running iBoot</h1>
+
+<p align="justify">
+In the previous part of this writeup, we dumped TLB data from device's memory with a payload called memrw while iBoot is running normally.
+Then, we placed the dumped TLB data to a strategic position in the corrupted HFS+ filesystem in order to make iBoot HFS+ driver write back this data where it should be in device's running memory.
+Instead of being overwritten by some random data, the TLB in running memory is overwritten by a copy (or a near-copy) of itself.
+This is enough to let the HFS+ driver continue writing data from the corrupted filesystem to running memory instead of getting iBoot to trigger a translation error panic at this point.
+</p>
+
+<p align="justify">
+After iBoot HFS+ driver is writing a few megabytes of random filesystem data ahead of TLB position in running memory, we get the bootloader to trigger a reset vector overwritten panic.
+
+<img class="align" src="resources/dump_overwrite_tlb-iboot_panic_task_main_0x00000000.png">
+
+</p>
+
+<p align="justify">
+The reset vector (RST) is defined as the first location or memory address where a processor must goes in order to find the first instruction it has to execute after being reset (or powered on). On the ARM processor for which our iOS devices are built from, the reset vector address is set to 0x0. This means that the processor will directly goes to memory address 0x0 and run the instruction located there.
+</p>
+
+<p align="justify">
+All iOS low-level bootloaders have their reset vector instruction located at 0x0 in the image. In case of a 32-bit ARM processor, this instruction is the first 0x4 bytes of the image and it has always the same well known value 0x0E0000EA (0xEA00000E in reverse-order representation). From the panic message returned by iBoot in the screenshot above, we can read the following.
+</p>
+
+<span class="cli">panic: task_yield: reset vector overwritten while executing task 'main' (0x00000000)</span>
+
+<p align="justify">
+We can understand from this error message that the reset vector value of current running iBoot in memory has been overwritten by some data (0x00000000 to be exact). Actually, this is iBoot HFS+ driver which has finally hit the reset vector of iBoot itself by overwriting it with some data from the filesystem.
+Since we previously have zeroed the complete <span class="cli">Exploit</span> partition using <span class="cli">dd</span>, this is normal that the reset vector gets overwritten with zeroes. Same as we did with the TLB, we can control what will being written to running memory by writing the data we want at strategic positions in the filesystem.
+If we would consider that iBoot doesn't check the reset vector state (and any other checks like that), the whole current running iBoot image would be entierely overwritten with zeroes. Obviously, the device would become unresponsive since iBoot is gone.
+
+<p align="justify">
+In order to avoid getting a panic message saying that the reset vector has been overwritten, what we can do is to make the HFS+ driver overwrite the current running iBoot in memory by a exact replica of the same iBoot data. Just like we did previously with TLB. So, iBoot reset vector will be overwritten by a true iBoot reset vector instead of zeroes.
+</p>
+
+<p align="justify">
+First, we will only overwrite the reset vector before do it for the whole iBoot image to verify that we calculated the right position in the "Exploit" partition where the iBoot data should be placed. If we did it correctly, we should see the data we wrote on the file system (at the position of iBoot reset vector) instead of 0x00000000 in the panic message returned by iBoot.
+</p>
+
+<p align="justify">
+<b>Important reminder, we previously analyzed a bit of iBoot memory layout in order to understand what is being overwritten by the HFS+ driver. Here is a summary of the most important addresses that we have to keep in mind to go further in the exploitation.</b>
+</p>
+
+<b>Memory space</b>
+
+<ul>
+	<li>iBoot reset vector : 0x9FF00000</li>
+	<li>iBoot HFS+ driver fifth read buffer address : 0x9FFB80C0</li>
+	<li>TLB location : 0x9FFF8000</li>
+	<li>iBoot reset vector (first iteration of virtual address space) : 0xBFF00000</li>
+</ul>
+ 
+<b>Exploit Filesystem</b>
+<ul>
+	<li>iBoot HFS+ driver fifth read offset (filesystem) : 0x28E000</li>
+	<li>TLB location (filesystem) : 0x2CDF40</li>
+</ul>
+
+<p align="justify">
+As explained previously in this writeup, at the fifth block read, iBoot HFS+ driver will start to write megabytes of data from HFS+ filesystem address 0x28E000 to iBoot running memory address 0x9FFB80C0. It will eventually overwrite TLB in running memory with original TLB data we wrote at a specific position in filesystem, 0x2CDF40 exactly.
+The memory overwrite process will continue until it reaches the virtual address space after more than [Device RAM size] bytes written. This ends up when iBoot reset vector in the virtual address space first iteration (known as "the mirrored iBoot") gets overwritten with zeroes and makes iBoot to panic, returning the message we got in the screenshot above.
+</p>
+
+<p align="justify">
+The presence of iBoot in the virtual memory space allow us to overwrite the bootloader itself, any changes made to this "mirrored iBoot" will be reflected to the physical address space one (the main iBoot which is located at 0x9FF00000). Remember that iBoot HFS+ driver write data to iBoot memory bottom-up (from low to higher addresses) and does not goes backward (how could we reach 0x9FF00000 from 0x9FFB80C0 ?).
+</p>
+
+<p align="justify">
+So, let's try first to overwrite the reset vector of iBoot in its virtual memory address space by writing some meaningful data at a strategic location on the <span class="cli">Exploit</span> filesystem.
+</p>
+
+<p align="justify">
+Same as we previously did with TLB, let's create an empty blank file using <span class="cli">dd</span>. Before, we will need the size of the iBoot image which is currently executing in memory to create a container which will be large enough to hold a copy of it. We already have decrypted the iBoot image, file named iBoot.k94ap.RELEASE_dec.bin, which is exactly the same data as the one running on our device memory.
+</p>
+
+<p align="justify">
+Get the size of this decrypted image from file properties or using a hex editor.
+</p>
+
+<img class="align" src="resources/overwrite_running_iboot-ihex_get_image_size.png">
+
+<p align="justify">
+From this, we know that our iBoot size is 0x3C000 (245 760). Also, remember that our device which is an iPad 2nd has a block size of 8192 bytes. Create an empty blank file of [iBoot size]+[Block size] using dd, were iBoot size is 245760 (which is 30 blocs of 8192 bytes) and Block size is 8192.
+</p>
+
+So, we have to create an empty file for which the size is 31 blocs.
+
+
+<p class="cli">pmbonneau-mac#dd if=/dev/zero of=iBoot.k94ap.overwrite_9ffb80c0.bin bs=8192 count=31</p>
+ 
+<img class="align" src="resources/overwrite_running_iboot-dd_create_empty_iboot_blocks.png">
+
+<p align="justify">
+The following four addresses will be useful for us to calculate the location of where we must write iBoot data on the filesystem.
+</p>
+
+<b>Memory space</b>
+
+<ul>
+<li>iBoot HFS+ driver fifth read buffer address : 0x9FFB80C0</li>
+<li>iBoot reset vector (first iteration of virtual address space) : 0xBFF00000</li>
+</ul>
+ 
+<b>Exploit Filesystem</b>
+
+<ul>
+<li>iBoot HFS+ driver fifth read offset (filesystem) : 0x28E000</li>
+</ul>
+
+<p align="justify">
+Do the following maths to calculate the iBoot data blocks position.
+</p>
+
+0xBFF00000 - 0x9FFB80C0 = 0x1FF47F40
+
+<p align="justify">
+This how much bytes there is between our heap buffer address and the first iteration of iBoot in the virtual memory space.
+</p>
+
+<p align="justify">
+Now, we must calculate at which position we should write those blocks in the Exploit partition, to make iBoot HFS+ driver write them in the running memory at the right position when the heap buffer overflow is triggered.
+</p>
+
+<p align="justify">
+So, if we want to know exactly at which position we must write back our iBoot data in the Exploit HFS+ filesystem, we must add 0x1FF47F40 ("mirrored iBoot" data offset in memory) to 0x28E000 (heap buffer overflow trigger point in the filesystem).
+</p>
+
+0x28E000 + 0x1FF47F40 = 0x201D5F40
+
+<p align="justify">
+In other words, iBoot data must be written to 0x201D5F40 in our <span class="cli">Exploit</span> filesystem in order to be written to 0xBFF00000 in running memory once the heap buffer overflow occures.
+</p>
+
+<p align="justify">
+Now, we must find which block 0x201D5F40 is on the filesystem by dividing by device [block size].
+</p>
+
+0x201D5F40 / 0x2000 = 0x100EA (65770)
+
+<p align="justify">
+We will have to write our iBoot data at block 65770 in our <span class="cli">Exploit</span> filesystem. Before do this, we must block-size align the data we will put in the three empty block we previously created using <span class="cli">dd</span>.
+</p>
+
+<p align="justify">
+Calculate the remainder by doing the following maths. 
+</p>
+
+<p align="justify">
+<b>Note : the structure is the data contained in block we write in filesystem.</b>
+</p>
+
+<p align="justify">
+[Position of our structure] - ([number of block between our structure and heap address] * [block size])
+</p>
+
+<p align="justify">
+0x201D5F40 - (0x100EA * 0x2000) = 0x201D5F40 - 0x201D4000 = 0x1F40
+</p>
+
+<p align="justify">
+This means that we must add a padding of 0x1F40 bytes before our iBoot data, at block 65770.
+</p>
+
+<p align="justify">
+In a hex editor, open the empty file iBoot.k94ap.overwrite_9ffb80c0.bin we previously created using <span class="cli">dd</span>.
+</p>
+
+<p align="justify">
+Go to position 0x1F40 in that file.
+</p>
+
+<img class="align" src="resources/overwrite_running_iboot-ihex_iboot_empty_blocks_position_0x1f40.png">
+
+<p align="justify">
+Everything you write to this position will be written at address 0xBFF00000 in running memory when the heap buffer overflow will occures.
+</p>
+
+<p align="justify">
+Let's try overwrite iBoot reset vector 0xEA00000E at 0xBFF00000 by 0xEFBEADDE (0xDEADBEEF in reverse-order representation)
+</p>
+
+<img class="align" src="resources/overwrite_running_iboot-ihex_iboot_blocks_0xdeadbeef_position_0x1f40.png">
+
+<p align="justify">
+Save the file, then upload it to <span class="cli">/exploit</span> on device using SCP.
+</p>
+
+<img class="align" src="resources/overwrite_running_iboot-scp_upload_iboot_blocks_0xdeadbeef.png">
+ 
+From a SSH connection on device, edit the <span class="cli">exploit.sh</span> script using a text editor. Uncomment line echo "Overwriting iBoot..." then add the following dd command.
+
+<p class="cli">dd if=iBoot.k94ap.Overwrite_[heap buffer address].bin of=/dev/rdisk0s1s3 bs=[block size] seek=[block position]</p>
+
+<img class="align" src="resources/overwrite_running_iboot-exploit_bash_script_iboot_blocks_0xdeadbeef.png">
+
+<p align="justify">
+Remember, we set at which position to start writing data from by specifying the seek parameter to the <span class="cli">dd</span> command. Note that your <span class="cli">Exploit</span> partition size must be greather than 65770 + 31 blocks, which is 65801 * 8192 = 539 041 792 bytes (514 MB) in order to be able to write blocks at position 65770 to 65801 using <span class="cli">dd</span>. This has been discussed previously in the LwVM partitionning guide.
+</p>
+
+<p align="justify">
+I strongly recommand to completely obliterate the Exploit HFS+ filesystem before run the <span class="cli">exploit.sh</span> script again.
+</p>
+
+<p class="cli">ipad-k94ap#dd if=/dev/zero of=/dev/rdisk0s1s3 bs=8192</p>
+ 
+
+<img class="align" src="resources/trigger_hbo-dd_zero_exploit_partition.png">
+
+<p align="justify">
+Once the <span class="cli">Exploit</span> partition is zero-ed, run the script. It should re-write, at their exact position into the partition, HFS+ filesystem data blocks, TLB ones and also write blocs that will overwrite the current running iBoot.
+</p>
+
+<p align="justify">
+Next, run the iBoot.k94ap.RELEASE_HFSReadWrapper.bin image. 
+</p>
+
+<p class="cli">ipad-k94ap#kloader /bootloaders/iBoot.k94ap.RELEASE_HFSReadWrapper.bin</p>
+ 
+<img class="align" src="resources/set_hfsreadblock_wrapper-kloader_iboot_hfsreadblock_wrapper.png">
+
+<p align="justify">
+The iBoot image should run a few seconds after and you will see the output of our <span class="cli">HFSReadBlock()</span> wrapper. If the reset vector has been properly overwritten, iBoot should panics and now return an output message with 0xdeadbeef instead of 0x00000000 as value for the overwritten reset vector.
+</p>
+
+<img class="align" src="resources/overwrite_running_iboot-iboot_panic_task_main_0xdeadbeef.png">
+
+<p align="justify">
+Now, we are certain that data at address 0x1F40 in bloc 65770 of the Exploit partition is exactly written at address 0xBFF00000 (reset vector) in iBoot running memory. Remember that iBoot memory space is replicated at each [Device's RAM size] iterations, so data written at 0xBFF00000 is also "written" at 0x5FF00000.
+Obviously, overwriting reset vector by 0xdeadbeef will still make iBoot panic because this is not a valid instruction. To avoid corrupting the bootloader, we must overwrite it by itself.
+</p>
+
+<p align="justify">
+Let's the HFS+ driver overwrite the current running iBoot in memory by a exact replica of the same iBoot data.
+</p>
+
+<p align="justify">
+In a hex editor, open again the file iBoot.k94ap.overwrite_9ffb80c0.bin we previously wrote 0xdeadbeef in. Open also the decrypted iOS 5.0.1 iBoot image, named iBoot.k94ap.RELEASE_dec.bin in a hex editor. This is the same iBoot image as the one running in our device memory.
+</p>
+
+<img class="align" src="resources/overwrite_running_iboot-ihex_iboot_blocks_0xdeadbeef_position_0x1f40.png">
+
+<img class="align" src="resources/overwrite_running_iboot-ihex_decrypted_ios5_iboot.png">
+
+<p align="justify">
+Select all bytes of the decrypted image, then CTRL-C to copy them to clipboard.
+</p>
+
+<img class="align" src="resources/overwrite_running_iboot-ihex_select_all_bytes_decrypted_iboot.png">
+
+<p align="justify">
+Paste the copied bytes at position 0x1F40 in the <span class="cli">iBoot.k94ap.overwrite_9ffb80c0.bin</span>, this will automatically replace 0xdeadbeef by a valid ARM reset vector.
+</p>
+
+<img class="align" src="resources/overwrite_running_iboot-ihex_paste_iboot_data_blocks.png">
+
+<br></br>
+<center><a href="prepare_run_shellcode.html" class="menu"><b>> Part 10:</b> Prepare and run shellcode</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2020 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS 5.x HFS+ Heap Buffer Overflow - Set HFSReadBlock() wrapper</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Set HFSReadBlock( ) wrapper</h1>
+
+<p align="justify">
+This writeup is based on <a href="https://twitter.com/p0sixninja">@p0sixninja's</a> work, we already know that this iBoot HFS+ heap buffer overflow is exploitable. Initial fuzzing and bug discovery won't be discussed in this writeup for now, although they are very interesting to learn about.
+<br></br>
+We consider that we already know that setting <span class="cli">catalogFile.extents[1].blockCount</span> of the HFS+ header to a huge number is triggering the bug. Knowing that, we now need a way to see what does iBoot tries to read from the corrupted HFS+ header before the panic occur. Note that iBoot only interects with HFS when it is ready to search for a kernelcache image on the filesystem or when it prepares an OTA upgrade.
+</p>
+
+The function in iBoot which parse a HFS+ partition originally looks like this.
+<pre><code>
+HFSInitPartition([args])
+{
+    print("HFSInitPartition...")
+    HFSReadBlock(uint offset, uint size, uint buffer)
+}
+</code></pre>
+
+<pre><code>
+HFSReadBlock(uint offset, uint size, uint buffer)
+{
+	//Function code
+}
+</code></pre>
+
+<p align="justify">
+We will set a wrapper function around <span class="cli">HFSReadBlock(uint offset, uint size, uint buffer)</span> which will print args passed to. In other words, we will replace the call to <span class="cli">HFSReadBlock()</span> by <span class="cli">HFSReadWrapper()</span> in <span class="cli">HFSInitPartition()</span>. Then, <span class="cli">HFSReadWrapper()</span> will print out arguments passed to <span class="cli">HFSReadBlock()</span>. The code of <span class="cli">HFSReadWrapper()</span> was written by <a href="https://twitter.com/nyan_satan">@nyan_satan</a>. It is a reimplementation of <span class="cli">HFSReadBlock()</span> but with some additional code to print args the original function receive such as offset, size, buffer and return value. Since <span class="cli">HFSReadBlock()</span> is reimplemented, we don't have to call this function from our wrapper.
+</p>
+
+The function in iBoot which parse a HFS+ partition should now looks like this.
+
+<pre><code>
+HFSInitPartition([args])
+{
+              print("HFSInitPartition...")
+              HFSReadWrapper()
+}
+</code></pre>
+
+<pre><code>
+HFSReadWrapper()
+{
+    // Do the same as HFSReadBlock() does.
+    // Print offset, size and buffer from the read.  
+}
+</code></pre>
+
+There's a sample code prepared by <a href="https://twitter.com/nyan_satan">@nyan_satan</a> to help us prepare the <span class="cli">HFSReadBlock() wrapper</span> for the iBoot we want to debug HFS+ functions. You can find it in the <a href="https://nyansatan.github.io/exploiting-ios-5-iboot/resources/starter_kit.zip">exploitation starter kit</a> he made for his writeup page about this iBoot exploit.
+<br></br>
+Here's the sample code found in <a href="https://twitter.com/nyan_satan">@nyan_satan's</a> exploitation kit. I marked as <span class="cli">0x########</span> the addresses that needs to be set according to the device and iBoot version you are working on.
+
+<pre><code>
+.text
+ 
+.pool
+ 
+.set BASEADDR, 0x########
+ 
+.set printf, 0x########
+ 
+.global _start
+ 
+_start:
+.code 16
+ 
+ 
+    PUSH {R4-R7, LR}
+    ADD R7, SP, #0xC
+    SUB SP, SP, #0x10
+ 
+    LDR R4, [R7, #0x8]
+ 
+    STR R0, [SP]
+    STR R1, [SP, #0x4]
+    STR R2, [SP, #0x8]
+    STR R3, [SP, #0xC]
+ 
+    MOV R3, R1
+    MOV R1, R2
+    MOV R2, R4
+    LDR R0, =ARGS_STR+BASEADDR
+    BL _printf
+ 
+ 
+    LDR R0, [SP]
+    LDR R1, [SP, #0x4]
+    LDR R2, [SP, #0x8]
+    LDR R3, [SP, #0xC]
+    STR R4, [SP]
+    LDR R0, [R0]
+    LDR R4, [R0, #0x1C]
+    BLX R4
+ 
+    MOV R1, R0
+    LDR R0, =RET_STR+BASEADDR
+    BL _printf
+ 
+    MOV R0, R1
+ 
+ 
+    ADD SP, SP, #0x10
+    POP {R4-R7, PC}
+ 
+_printf:
+ 
+    PUSH {R0-R7, LR}
+    LDR R4, =printf
+    BLX R4
+    POP {R0-R7, PC}
+ 
+ARGS_STR:
+.ascii "HFSReadBlock: offset 0x%x size 0x%x buffer 0x%x\n\x00"
+ 
+RET_STR:
+.ascii "Returned: 0x%x\n\x00"
+</code></pre>
+ 
+We have two addresses to set, <span class="cli">BASEADDR</span> and <span class="cli">printf</span>.
+First, <span class="cli">BASEADDR</span> is the address for which the payload code will be stored in iBoot. In other words, the payload base address corresponds to the payload location in iBoot.
+<br></br>
+Second, <span class="cli">printf</span> is the address of where the printf function is located in iBoot. This function is responsible to output characters to terminal (by UART or irecovery). The text you see when looking at the iBoot console must call this function before being printed.
+<br></br>
+Let's disassemble iBoot using Ghidra, a free disassembly tool brought to us by NSA. Ghidra will turn the binary data into readable assembly code that we will look at to find interesting functions in the bootloader.
+<br></br>
+To disassemble the iBoot image, it must be first decrypted. Use xpwntool to do this, without the <span class="cli">-decrypt</span> flag because we don't want to keep the .img3 header. Also, be sure you work on the same iBoot image as the vulnerable iBoot one flashed on your device. In our case, we will decrypt iOS 5.0.1 one.
+
+<p class="cli">pmbonneau-mac#xpwntool iBoot.k94ap.RELEASE.img3 iBoot.k94ap.RELEASE_dec.bin -iv e71a9b61becdaf35ccad7a2112353b6a -k 9f07fec9333e87c717cef55ac58483e07f704fafd2b130baf77699fbf6189b2c</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-decrypt_iboot_image.png">
+
+<p align="justify">
+In a new Ghidra project, import the decrypted iBoot image. Note that Ghidra will copy the image file to the project. You can choose to write patches we will find directly into the decrypted iBoot image or make a copy of it and work on that copy.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_import_file.png">
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_select_iboot_image.png">
+ 
+Select "ARM v7 32-bit Little Endian Thumb" (ARM v7 32-bit Little Endian Thumb) as language. Press "OK" to continue.
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_import_file_select_language.png">
+
+Open the imported iBoot image.
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_import_file_rename.png">
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_project_menu.png">
+
+Let Ghidra analyze the file.
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_analyze_file_prompt.png">
+ 
+Keep default options.
+ 
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_analyze_file_options.png">
+ 
+Wait until Ghidra has completely analyzed the image. The disassembled output should looks like this.
+<br></br>
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_analyzed_image.png">
+
+<br></br>
+
+<br></br>
+
+<p align="justify">
+By default, any opened iOS bootloader images will be based to <span class="cli">0x00000000</span>. In order to represent as much as possible the real device environment, you need to rebase the image to the address for which the image is set to run. The rebase address is often in the first <span class="cli">0x120</span> bytes of the image, in the ARM initialization section. You can easily notice it by the instuction <span class="cli">bx r1 [base_addr]</span>, for which <span class="cli">base_addr</span> value usually has few 0's in. For example, <span class="cli">0x84000000</span> (A4 LLB) and <span class="cli">0x5FF00000</span> (A4 iBoot). Note that <span class="cli">base_addr</span> is shared between devices with same processor.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_analyzed_image.png">
+
+<p align="justify">
+For an iPad2,2 (A5) iBoot, our rebase address is <span class="cli">0x9FF00000</span>. Go to "Window", then "Memory Map".
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_window_memory_map.png">
+
+<p align="justify">
+Click on the house icon at the upper right, then enter the base address found in the disassembled code.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_memory_map_set_baseaddr.png">
+
+<p align="justify">
+Image base should now starts at RAM address <span class="cli">0x9FF00000</span>.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_memory_map_image_rebased.png">
+
+<p align="justify">
+You should see that addresses in the disassembled code are now updated to reflect the memory layout of the device on which the bootloader image is intended to run.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_image_rebased.png">
+
+<p align="justify">
+We are finally set, now ready to work with the disassembled image.
+<br></br>
+Let's search for the printf function. This function is relatively simple to find, code pattern is like put a string in a register then call the function. The register in question is <span class="cli">r0</span>.
+<br></br>
+In Ghidra toolbar, click on "Search" then "Program Text".
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_search_program_text.png">
+
+<p align="justify">
+We must search for a string we know that will be shown in the iBoot console using irecovery or UART. A good one is "Kernelcache image not valid", which appears when iBoot can't read the kernelcache image (invalid, corrupted or not found).
+<br></br>
+Search for "Kernelcache image not valid" and select "All fields".
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_search_text_kc_image.png">
+
+<p align="justify">
+Ghidra should bring you to a table where most iBoot strings are located.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_iboot_string_kc_not_valid.png">
+
+<p align="justify">
+Click on the address of the string found to select it. In Ghidra toolbar, click on "Search" then "For Direct References".
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_search_direct_ref_kc_not_valid.png">
+
+<p align="justify">
+You should see one result found. Be sure that "To Location" points to the proper string address.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_direct_ref_kc_not_valid_found.png">
+
+<p align="justify">
+Double-click on the reference found.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_kc_not_valid_string_data.png">
+
+<p align="justify">
+Follow the reference of that code, it is called by a function. Hold the mouse over the referenced function.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_kc_load_function_preview.png">
+
+<p align="justify">
+We found the kernelcache load image function. Double-click on where you hold the mouse, Ghidra will bring you to the function.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_kc_load_function.png">
+
+<p align="justify">
+In fact, Ghidra should brings you right before the printf function. This is where the string is loaded into the <span class="cli">r0</span> registry that will be used by <span class="cli">printf</span>.
+<br></br>
+The call to the printf function should looks like <span class="cli">bl [printf address]</span>.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_kc_load_function_printf.png">
+
+<p align="justify">
+For iPad 2nd (K94AP) iOS 5.0.1 iBoot, the printf function address is <span class="cli">0x9FF2E9A0</span>. Set this address in the HFSReadWrapper code.
+<br></br>
+<b>Important</b> : Since you are calling a function in armv7 thumb, you must do <span class="cli">[function_address] + 0x1</span>. So, we set the code like this.
+
+<pre><code>
+.set printf, 0x9FF2E9A1
+</code></pre>
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-payload_set_printf.png">
+
+<p align="justify">
+Now, let's find the ideal base address for our payload. Open the decrypted iBoot image in a hex editor, then look for an empty spot. The best spots are usually around the banner string (iBoot for ..., Copyright Apple Inc.) or you can also overwrite certificate info. Since the compiled payload is relatively small in size, I will place it around the banner string. For bigger payloads, the other option is preferred.
+
+<!--*** Put screenshot there ***-->
+ 
+I will place my compiled payload at <span class="cli">0x9FF00100</span>. So, we set <span class="cli">BASEADDR</span> in the payload code to <span class="cli">0x9FF00100</span>.
+
+<pre><code>
+.set BASEADDR, 0x9FF00100
+</code></pre>
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-payload_set_baseaddr.png">
+
+<br></br>
+
+<br></br>
+
+<p align="justify">
+We are now ready to compile the payload code into an armv7 binary. To do this, you must have the arm toolchain installed on your computer. If you are working on MacOS X, you can install the <span class="cli">arm-none-eabi-gcc</span> package from MacPorts or from brew with those commands.
+</p>
+
+<p class="cli">
+brew install binutils<br></br>
+brew cask install https://raw.githubusercontent.com/Homebrew/homebrew-cask/b88346667547cc85f8f2cacb3dfe7b754c8afc8a/Casks/gcc-arm-embedded.rb
+</p>
+
+Once the toolchain is correctly installed, run the following command to compile the assembly code into an arm object.
+<p class="cli">pmbonneau-mac#arm-none-eabi-as -mthumb --fatal-warnings -o HFSReadWrapper_k94ap_5.0.1.o HFSReadWrapper_k94ap_5.0.1.s</p>
+
+Copy the compiled object into an arm binary.
+<p class="cli">arm-none-eabi-objcopy -0 binary HFSReadWrapper_k94ap_5.0.1.o HFSReadWrapper_k94ap_5.0.1.bin</p>
+ 
+A <span class="cli">.bin</span> file should be generated, which contains the compiled payload code.
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-compiled_payload.png">
+
+<p align="justify">
+Append it to your decrypted iOS 5.0.1 iBoot image, at payload <span class="cli">BASEADDR</span> position <span class="cli">(0x9FF00100)</span>. You can do copy & paste from iHex. Note that <span class="cli">0x9FF00100</span> is <span class="cli">0x100</span> in our decrypted image, we must subtract iBoot base address to obtain the address not rebased (for example, <span class="cli">0x9FF00100 - 0x9FF00000 = 0x00000100</span>).
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-copy_payload_bin_to_iboot.png">
+
+<p align="justify">
+The next step is to hook the <span class="cli">HFSReadBlock()</span> function in iBoot, so it runs our payload that will do what this function actually does plus printing args passed to it. Our payload is also made to keep track of iBoot execution stack. So, iBoot will go back to <span class="cli">HFSInitPartition()</span> after our payload has finished to run.
+This is why we <span class="cli">PUSH {R4-R7, LR}</span> and <span class="cli">POP {R4-R7, PC}</span> in the payload code.
+
+One usually complicated task to do when calling custom code from a statically disassembled binary is to calculate the branch code. Fortunately, I noticed that Ghidra has a nice branch calculator built-in. Otherwise, you could use <a href="http://armconverter.com/branchfinder/">ARM branch finder</a> website. Use the ARMv7 THUMB New-Engine.
+<br></br>
+In Ghidra, we will add a label called "HFS_Read_Wrapper" at address 0x9FF00100 where our wrapper payload code is placed.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_iboot_payload_position.png">
+
+<p align="justify">
+Right-click on the address line, then "Add Label...".
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_iboot_add_label.png">
+
+<p align="justify">
+Name the new label as "HFS_Read_Wrapper", then click "OK".
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_iboot_add_label_window.png">
+
+<p align="justify">
+The address <span class="cli">0x9FF00100</span> should be now labeled as specified.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_iboot_payload_label.png">
+
+<p align="justify">
+Still in Ghidra, search for the string "HFS" the same way we did previously for "Kernelcache image not valid".
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_search_program_text.png">
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_search_text_hfs.png">
+
+<p align="justify">
+Ghidra will bring you to the first occurrence found, which should be <span class="cli">HFSInitpartition</span>. This is the string shown in the iBoot console when iBoot is mounting a HFS+ volume. This string is used by the <span class="cli">HFSInitPartition()</span> function in iBoot, so we should be able to find it from there.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_iboot_string_hfs_init.png">
+
+<p align="justify">
+Click on the address of the string found to select it. In Ghidra toolbar, click on "Search" then "For Direct References".
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_iboot_string_hfs_init.png">
+<br></br>
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_search_direct_ref_hfs_init.png">
+
+<p align="justify">
+You should see one result found. Be sure that "To Location" points to the proper string address.
+<br></br>
+Double-click on the reference found.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_direct_ref_hfs_init_found.png">
+
+<p align="justify">
+Follow the reference of that code, it is called by a function. Hold the mouse over the referenced function.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_hfs_init_string_ref.png">
+
+<p align="justify">
+Double-click on where you hold the mouse, we land directly into iBoot HFSInitPartition() function.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_hfs_init_function.png">
+
+<p align="justify">
+Note that the function <span class="cli">0x9FF2E9A0</span> called below is <span class="cli">printf</span>, to print the string <span class="cli">HFSInitPartition</span>. The next function call you see in the disassembled code <span class="cli">bl FUN_9FF13B20</span> is actually the one that interests us. This is a branch to the <span class="cli">HFSReadBlock()</span> function.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_hfs_read_block_ref.png">
+
+<p align="justify">
+Double-click on function branch line, <span class="cli">bl FUN_9FF13B20</span>, Ghidra will bring you to the disassembled code of the <span class="cli">HFSReadBlock()</span> function.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_hfs_read_block.png">
+
+<p align="justify">
+Select the function entry point <span class="cli">0x9FF13B20</span>, then right-click and select "Patch Instruction".
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_patch_instruction_1.png">
+
+<p align="justify">
+We want to place a hook to our wrapper payload from <span class="cli">HFSReadBlock()</span> function. So, we will replace the <span class="cli">HFSReadBlock()</span> function entry point to a branch to our wrapper payload. The branch instruction is pretty simple, <span class="cli">b.w [our label we set for the payload]</span>.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_patch_instruction_2.png">
+
+<p align="justify">
+Ghidra will automatically calculate the operation code hexadecimal value and even, it will add a nice arrow at the left that should point to our payload code.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_patch_instruction_3.png">
+
+<br></br>
+
+<br></br>
+
+<p align="justify">
+We must now apply this patch to our decrypted iBoot image. Using an hexadecimal editor, go to the <span class="cli">HFSReadBlock()</span> function address. In the hexadecimal editor, it will be at <span class="cli">0x13B20</span> because the image is not rebased.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ihex_patch_hfs_read_block.png">
+
+<p align="justify">
+The patched instruction is four bytes of length. Replace four bytes from the <span class="cli">HFSReadBlock()</span> function address by the four bytes Ghidra calculated for us.
+ 
+For this example, we replace <span class="cli">0x0068D0F8</span> by <span class="cli">0xECF7EEBA</span>.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ihex_patch_hfs_read_block.png">
+ 
+<img class="align" src="resources/set_hfsreadblock_wrapper-ihex_patched_hfs_read_block.png">
+
+<p align="justify">
+With this patch applied, that iBoot image should now execute our payload code when it calls <span class="cli">HFSInitPartition()</span> to read the System partition HFS+ volume.
+<br></br>
+We still have another patch to do that goes with the exploitation environment setup. As I said earlier in this writeup, we will have to eventually corrupt a HFS+ volume header in order to trigger the bug. We will definitively not corrupt the system partition one without having an exact idea of how it goes in the device memory. In order to make our exploitation environment more suitable for development and debugging, we will patch iBoot to use the additional partition that we created earlier (labeled as <span class="cli">Exploit</span>) instead of the system one.
+We created the <span class="cli">Exploit</span> partition at the third position, right after main iOS <span class="cli">Data</span> one. In iBoot, partition indexation start from <span class="cli">index 0</span> to <span class="cli">index 7</span> (remember that we can't have more than eight partitions when using LwVM). So, our third partition will have <span class="cli">index 2</span>, also known as the index used by iBoot to identify the OTA upgrade partition.
+</p>
+
+We have two possibilities to set a custom boot partition in iBoot.
+
+<ul>
+	<li>Replace hard-coded values of boot-command from <span class="cli">fsboot</span> to <span class="cli">upgrade</span>.</li>
+	<li>Change default boot-partition value from <span class="cli">0</span> to <span class="cli">2</span>.</li>
+</ul>
+
+<p align="justify">
+In iBoot, there's a set of hard-coded NVRAM variables that are only considered when there is no corresponding one set in NVRAM. In other words, variables set in NVRAM override the ones hard-coded in iBoot. For example, if we set <span class="cli">boot-command</span> variable in NVRAM with <span class="cli">upgrade</span> as value, iBoot will do upgrade instead of default fsboot routines. If the <span class="cli">boot-command</span> variable is not set in NVRAM, iBoot will read it from its hard-coded set and get the value <span class="cli">fsboot</span> by default.
+If we don't force boot partition, the custom iBoot image we will execute using kloader to dry-run our exploit will always mount the stock <span class="cli">System</span> partition on which we did not corrupt the filesystem for obvious reasons.
+<br></br>
+Let's patch the hard-coded <span class="cli">fsboot</span> boot-command to <span class="cli">upgrade</span> in our decrypted iOS 5.0.1 iBoot image. When we will run iBoot using kloader, it will mount the partition indexed by 2 and attempt an OTA upgrade which will fail because our <span class="cli">Exploit</span> partition isn't even formatted.
+</p>
+
+Using an hexadecimal editor, search for the string "fsboot" in the iBoot image.
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ihex_search_string_fsboot.png">
+
+<p align="justify">
+The first occurrence found should be the right one. In the hexadecimal view, it looks like <span class="cli">006673626F6F7400</span>. The first <span class="cli">0x00</span> corresponds to the beginning of the string and the last <span class="cli">0x00</span> corresponds to the end. The address of this string is the one of the first character, right after the first <span class="cli">0x00</span>. For "fsboot", this is <span class="cli">0x2FA0F</span>.
+</p>
+
+Search now for the string "upgrade". 
+ 
+<img class="align" src="resources/set_hfsreadblock_wrapper-ihex_search_string_upgrade.png">
+
+<p align="justify">
+There are multiple occurences of that one as I know, be careful. Only choose the one which has 0x00's around it, like I said for "fsboot" The right string should looks like <span class="cli">007570677261646500</span> and its address is <span class="cli">0x2FA1C</span>.
+</p>
+
+<p align="justify">
+Open the decrypted iBoot image in Ghidra, then open the "Search program text" menu.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_search_program_text.png">
+
+<p align="justify">
+Search for the "fsboot" address rebased.
+</p>
+
+<span class="cli">0x9FF00000 + 0x2FA0F = 0x9FF2FA0F</span>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_search_text_fsboot_address.png">
+
+<p align="justify">
+Ghidra will bring you to a reference to the "fsboot" string address.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_fsboot_string_addr_ref.png">
+
+<p align="justify">
+Double-click on the line to follow the reference.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ghidra_fsboot_string_addr_follow_ref.png">
+
+<p align="justify">
+The address that interests us is <span class="cli">0x9FF011D4</span>, we will replace the value at this address by the "upgrade" string address.
+<br></br>
+In the hexadecimal editor, go to address <span class="cli">0x9FF011D4 - 0x9FF00000 = <b>0x11D4</b></span>.
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ihex_fsboot_string_address.png">
+
+<p align="justify">
+Replace the value <span class="cli">0xF0FAF29F (0x9FF2FA0F)</span>, "fsboot", by <span class="cli">0x1CFAF29F (0x9FF2FA1C)</span>, "upgrade".
+</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-ihex_fsboot_string_address.png">
+ 
+<img class="align" src="resources/set_hfsreadblock_wrapper-ihex_fsboot_string_address_patched.png">
+
+<p align="justify">
+Save changes, then upload the patched file to device using SCP. I suggest you create a folder named "bootloaders" in the root directory of the system partition then upload the file into it.
+</p>
+<!--*** SCP screenshot missing *** -->
+ 
+From a SSH connection, run the patched iBoot image using kloader to see if our patches work as expected.
+
+<p class="cli">ipad-k94ap#kloader /bootloaders/iBoot.k94ap.RELEASE_HFSReadWrapper.bin</p>
+
+<img class="align" src="resources/set_hfsreadblock_wrapper-kloader_iboot_hfsreadblock_wrapper.png">
+
+<p align="justify">
+The patched iBoot image should run a few seconds after. If everything is okay, you should see the output of our wrapper and the message "Invalid HFS signature" over UART. This message is a normal behaviour, because our <span class="cli">Exploit</span> partition is not formatted.
+<br></br>
+Our work environment is finally set, we are now ready to exploit the vulnerability.
+</p>
+<br></br>
+<center><a href="trigger_hbo.html" class="menu"><b>> Part 7:</b> Trigger the heap buffer overflow</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2020 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

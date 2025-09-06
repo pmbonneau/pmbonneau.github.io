@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>iOS 5.x HFS+ Heap Buffer Overflow - Trigger the heap buffer overflow</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Trigger the heap buffer overflow</h1>
+
+We are now at the core of this writeup, the vulnerability itself.
+<br></br> 
+Currently, we have the following disk partition layout.
+<ul>
+<li><span class="cli">/dev/rdisk0s1s1</span> : System, HFS+</li>
+<li><span class="cli">/dev/rdisk0s1s2</span> : Data, HFS+</li>
+<li><span class="cli">/dev/rdisk0s1s3</span> : Exploit, unformatted</li>
+</ul>
+
+<p align="justify">
+We also have a customized iBoot (<span class="cli">iBoot.k94ap.HFSReadWrapper.bin</span>) which uses <span class="cli">/dev/rdisk0s1s3</span> as boot partition and outputs HFS read info over UART.
+</p>
+
+Now, we need to format our <span class="cli">/dev/rdisk0s1s3</span> (<i>Exploit</i>) partition so iBoot can see a valid HFS+ volume when trying to mount it.
+<br></br>
+We have multiple ways to format a partition on iOS.
+<ul>
+<li><span class="cli">newfs_hfs</span>, see <a href="https://www.pmbonneau.com/multiboot/">iOS multiboot</a> for more details. It creates a new empty HFS+ volume ready to use.</li>
+<li><span class="cli">dd</span>, can litteraly turn the partition into anything. The partition will have the exact layout as the input file set to dd.</li>
+<li><span class="cli">asr</span> (Apple Software Restore), Apple's disk imaging engine. It is limited to supported disk image formats (such as .dmg) and have checksum functionalities.</li>
+</ul>
+
+<p align="justify">
+For a currently unknown reason, <b>I could only get the exploit working with the iOS 5.1.1 root filesystem .dmg image of iPod Touch 3rd generation</b> flashed on the <span class="cli">Exploit</span> partition using dd.
+</p>
+
+<p align="justify">
+Flashing the iPad 2nd iOS 5.0.1 root filesystem .dmg instead would obviously makes more sense, but it seems that the <span class="cli">TLB</span>(will be discusses later in this writeup) could not be properly overwritten by the exploit and soon iBoot was in a panic state.
+</p>
+
+<p align="justify">
+This might looks weird to flash an iPod Touch 3rd firmware on an iPad 2nd, but actually we only need a valid HFS+ volume header that iBoot HFS functions can properly read. We don't care about the filesystem content, as the heap buffer overflow will be triggered before any files are read.
+</p>
+
+Go back on theiphonewiki in the firmware download section, <a href="https://www.theiphonewiki.com/wiki/Firmware">https://www.theiphonewiki.com/wiki/Firmware</a>.
+<br></br>
+Scroll-down to "iPod Touch", then go on the "5.x" download page.
+
+<img class="align" src="resources/trigger_hbo-theiphonewiki_ipodtouch_ios5_firmwares.png">
+ 
+<img class="align" src="resources/trigger_hbo-theiphonewiki_ipod3rd_ios5_fw.png">
+ 
+Download iOS 5.1.1 (9B206), don't forget to compare the shasum hash.
+<br></br>
+
+<p align="justify">
+Extract the .ipsw file into your work folder.
+</p>
+
+<img class="align" src="resources/trigger_hbo-extract_ipod3rd_ios5_ipsw.png">
+
+<p align="justify">
+Using SCP, upload the encrypted root filesystem .dmg to your device. Destination folder should be somewhere in the user data partition. I usually create an "images" folder under <span class="cli">/var</span> and I upload the .dmg to that folder.
+</p>
+
+<p class="cli">pmbonneau-mac#scp -P 2022 038-4324-006.dmg root@localhost:/var/images/iPod3,1_5.1.1_9B206_RootFS.dmg</p>
+
+<img class="align" src="resources/trigger_hbo-scp_ipod3rd_ios5_rootfs_dmg.png">
+ 
+With on-device xpwntools (the package XPwn can be found on Saurik's Cydia repo), use the <span class="cli">dmg</span> utility to decrypt the root filesystem image.
+ 
+<p class="cli">iPad-k94ap#dmg extract iPod3,1_5.1.1_9B206_RootFS.dmg iPod3,1_5.1.1_9B206_RootFS_dec.dmg -k 33148831d924a6ea1e9f1051cb0abfb15dc481a91617f37d950612de185c5f182d963a15</p>
+
+<img class="align" src="resources/trigger_hbo-decrypt_ipod3rd_ios5_rootfs_dmg.png">
+
+After the image is properly decrypted, write the first 32768 blocks into the <span class="cli">Exploit</span> partition.
+<br></br>
+
+<p align="justify">
+Remember, our block size is 8192 bytes, so this will write around 32768 * 8192 = 268435456 bytes (268 MB). We could write the complete image, but this is not necessary because we are only interested in a specific set of blocks from it.
+</p>
+
+<p class="cli">iPad-k94ap#dd if=iPod3,1_5.1.1_9B206_RootFS_dec.dmg of=/dev/rdisk0s1s3 bs=8192 count=32768</p>
+
+<img class="align" src="resources/trigger_hbo-dd_write_ipod3rd_ios5_rootfs_dmg.png">
+
+<p align="justify">
+Create a directory called "exploit" somewhere easy to remember. We will put all files (dumps, payload and scripts) used to setup the iBoot exploit in this directory. I usually create it in the <span class="cli">/</span> folder, at the same place than our "bootloader" folder.
+</p>
+
+<br></br>
+
+<br></br>
+
+Still using <span class="cli">dd</span>, dump back the HFS+ header. It is located in the first block of our HFS+ partition. Only one block should be enough to get the complete header.
+ 
+<p class="cli">iPad-k94ap#dd if=/dev/rdisk0s1s3 of=hfs_header.bin bs=8192 count=1</p>
+
+<img class="align" src="resources/trigger_hbo-dd_dump_original_hfs_header.png">
+ 
+Download the dumped HFS+ header to your iOS 5.0.1 folder on your local computer. You can do this using command line scp or a GUI software (I usually use FileZilla on Mac).
+
+<img class="align" src="resources/trigger_hbo-filezilla_download_hfs_header_dump.png">
+
+<p align="justify">
+Now, we are going to trigger the heap buffer overflow by corrupting the HFS+ header.
+</p>
+
+<p align="justify">
+Open the <span class="cli">hfs_header.bin</span> file in an hexadecimal editor. We already know that the heap buffer overflow we're talking about in this writeup is trigerred by setting <span class="cli">catalogFile.extents[1].blockCount</span> in the HFS+ header to a high value. To have a better understanding of what we are going to do, let's analyze our HFS+ header dump to see how it works.
+</p>
+
+The <a href="http://www.dubeyko.com/development/FileSystems/HFSPLUS/hexdumps/hfsplus_volume_header.html">following website</a> contains a very good structure analysis of the HFS+ volume header, let's compare our dump with the info provided there to find what we have to corrupt in order to trigger the bug.
+<br></br>
+In our dump, the HFS+ volume header starts at <span class="cli">0x400</span>. It starts with the <span class="cli">H</span> signature, so this is offset <span class="cli">0x0</span> in the "Offsets in the HFS+ volume header" table found on the website.
+<br></br>
+Let's search for <span class="cli">catalogFile.extents[1].blockCount</span> in this table, it is located at offset <span class="cli">+0x12C</span>.
+<br></br>
+<img class="align" src="resources/trigger_hbo-hfs_volume_header_hexdump.png">
+<img class="align" src="resources/trigger_hbo-hfs_volume_header_offsets_table.png">
+
+<p align="justify">
+We know that the HFS+ volume header starts at <span class="cli">0x400</span> in our <span class="cli">hfs_header.bin</span> hex dump, so adding <span class="cli">0x12C</span> to <span class="cli">0x400</span> will tell us where <span class="cli">catalogFile.extents[1].blockCount</span> is located in that dump. It should be exactly located at <span class="cli">0x52C</span>.
+Keep also in mind the position of <span class="cli">catalogFile.extents[1].startBlock</span> because we will need to corrupt this value as well. It is located right before <span class="cli">catalogFile.extents[1].blockCount</span>, at offset <span class="cli">+0x128</span> (<span class="cli">0x528</span> in our dump).
+</p>
+
+<ul>
+<li><span class="cli">header->catalogFile.extents[1].startBlock</span> : <span class="cli">0x528</span></li>
+<li><span class="cli">header->catalogFile.extents[1].blockCount</span> : <span class="cli">0x52C</span></li>
+</ul>
+
+<img class="align" src="resources/trigger_hbo-ihex_hfs_original_blockstart_blockcount.png">
+
+<p align="justify">
+Set <span class="cli">header->catalogFile.extents[1].startBlock</span> to a low value, <span class="cli">0x10</span> seems to be a good choice from previous experiences. Honestly, I still don't understand why we must modify this. People who have previously exploited the vulnerability had success with, so I followed.
+</p>
+
+<p align="justify">
+Set <span class="cli">header->catalogFile.extents[1].blockCount</span> to a high value, <span class="cli">0x10000000</span> is usually enough. This will trigger the heap buffer overflow, iBoot HFS+ driver will read more data from the filesystem that it should do.
+</p>
+
+<img class="align" src="resources/trigger_hbo-ihex_hfs_corrupted_blockstart_blockcount.png">
+
+Save the changes, our HFS+ volume header is now corrupted. Let's write it back to the filesystem. Upload it back to device using SSH connection, overwrite the old <span class="cli">hfs_header.bin</span> file.
+
+<img class="align" src="resources/trigger_hbo-filezilla_upload_corrupted_hfs_header_dump.png">
+ 
+Write <span class="cli">hfs_header.bin</span> back to the <span class="cli">Exploit</span> partition using <span class="cli">dd</span>.
+ 
+<p class="cli">iPad-k94ap#dd if=hfs_header.bin of=/dev/rdisk0s1s3 bs=8192</p>
+
+<img class="align" src="resources/trigger_hbo-dd_write_corrupted_hfs_header.png">
+
+<br></br>
+
+<br></br>
+
+Let's dry-run the heap buffer overflow, run kloader with our patched iOS 5.0.1 iBoot.
+ 
+<p class="cli">iPad-k94ap#kloader /bootloaders/iBoot.k94ap.RELEASE_HFSReadWrapper.bin</p>
+ 
+<img class="align" src="resources/set_hfsreadblock_wrapper-kloader_iboot_hfsreadblock_wrapper.png">
+
+<p align="justify">
+Once iBoot is running, you should see our HFS wrapper printing the function parameters passed to <span class="cli">HFSReadBlock()</span> in the following format.
+</p>
+
+HFSReadBlock: offset [position on disk device] size [size of the read] buffer [position in device memory]
+
+<img class="align" src="resources/trigger_hbo-hfsreadblock_wrapper_panic_translation_error.png">
+ 
+We interprete this as follow:
+<br></br>
+
+<p align="justify">
+From <span class="cli">offset</span>, read <span class="cli">size</span> bytes into <span class="cli">buffer</span>
+</p>
+
+<p align="justify">
+In other words, <span class="cli">size</span> bytes from <span class="cli">offset</span> are copied to <span class="cli">buffer</span>.
+</p>
+
+<p align="justify">
+Previously, we wrote a partital iPod Touch 3rd iOS 5.0.1 root filesystem .dmg image to our <span class="cli">Exploit</span> partition because we were only interested in a specific set of blocks from it. To be more precise, we only need some specific blocks that iBoot will read when it mounts the HFS+ volume in order to trigger the heap buffer overflow.
+</p>
+
+From the HFS wrapper output above, we can see the exact position of those blocks that are read by the bootloader.
+<ul>
+<li>Block 1: <span class="cli">offset=0x400</span></li>
+<li>Block 2: <span class="cli">offset=0x100A000</span></li>
+<li>Block 3: <span class="cli">offset=0x80A000</span></li>
+<li>Block 4: <span class="cli">offset=0x1214000</span></li>
+<li>Block 5: <span class="cli">offset=0x28E000</span></li>
+</ul>
+
+<p align="justify">
+We will have to dump each of those blocks from our <span class="cli">Exploit</span> partition, completely wipe the partition, then rewrite only those blocks. This will make our exploit implementation cleaner and also be able to use the accelerator hack (discussed further in this writeup).
+</p>
+
+<p align="justify">
+Let's calculate where those blocks are located on the <span class="cli">Exploit</span> partititon. The general formula is the following.
+</p>
+
+Position = [offset] / [block size]
+<br></br>
+Remember that our device's block size is <span class="cli">0x2000 (8192)</span> bytes.
+<ul>
+<li>Block 1: offset=0x400
+<br></br>
+0x400 / 0x2000 = 0x0 (obviously the first block of the partition)</li>
+<br></br>
+<li>Block 2: offset=0x100A000
+<br></br>
+0x100A000 / 0x2000 = 0x805 (2053)</li>
+<br></br>
+<li>Block 3: offset=0x80A000
+<br></br>
+0x80A000 / 0x2000 = 0x405 (1029)</li>
+<br></br>
+<li>Block 4 : offset=0x1214000
+<br></br>
+0x1214000 / 0x2000 = 0x90A (2314)</li>
+<br></br>
+<li>Block 5 : offset=0x28E000
+<br></br>
+0x28E000 / 0x2000 = 0x147 (327)</li>
+</ul>
+
+<p align="justify">
+We can use dd command to directly dump a specific block of data from the partition. Let's use this command to get those five blocks we have previously calculated the exact position.
+</p>
+
+Block 1: offset = 0
+<p class="cli">iPad-k94ap#dd if=/dev/rdisk0s1s3 of=hfs_block_0x400.bin bs=8192 count=1</p>
+ 
+<img class="align" src="resources/trigger_hbo-dd_dump_hfs_block_400.png">
+ 
+Block 2: offset = 2053
+<p class="cli">iPad-k94ap#dd if=/dev/rdisk0s1s3 of=hfs_block_0x100A000.bin bs=8192 skip=2053 count=1</p>
+ 
+<img class="align" src="resources/trigger_hbo-dd_dump_hfs_block_100a000.png">
+ 
+Block 3: offset = 1029
+<p class="cli">iPad-k94ap#dd if=/dev/rdisk0s1s3 of=hfs_block_0x80A000.bin bs=8192 skip=1029 count=1</p>
+ 
+<img class="align" src="resources/trigger_hbo-dd_dump_hfs_block_80a000.png">
+ 
+Block 4: offset = 2314
+<p class="cli">iPad-k94ap#dd if=/dev/rdisk0s1s3 of=hfs_block_0x1214000.bin bs=8192 skip=2314 count=1</p>
+ 
+<img class="align" src="resources/trigger_hbo-dd_dump_hfs_block_1214000.png">
+ 
+Block 5: offset = 327
+<p class="cli">iPad-k94ap#dd if=/dev/rdisk0s1s3 of=hfs_block_0x28E000.bin bs=8192 skip=327 count=1</p>
+ 
+<img class="align" src="resources/trigger_hbo-dd_dump_hfs_block_28e000.png">
+
+<p align="justify">
+We dumped the five blocks iBoot's HFS+ driver reads before the heap buffer overflow is triggered (by the fifth read).
+</p>
+
+<br></br>
+<p align="justify">
+Before write back those blocks on the partition, it is recommanded forcing that fifth read <span class="cli">HFSReadBlock()</span> buffer address to shift by adding some variables into device nvram.
+We know that any changes to nvram will shift (if content added to) or un-shift (if content removed from) the <span class="cli">HFSReadBlock()</span> buffer address for which all our future maths are based, resulting in an awful death of our exploit implementation.
+Important, iOS has multiple silent (without user intervention) mechanisms that modify nvram data mostly to keep track of some system events. To be more precise, some events such as running out of battery or kernel panic might dump some data to nvram which will most likely shift heap buffers addresses, ending up to a bootloop.
+This bootloop case can be easily solved by removing the additional data that has been written to nvram, so heap buffers addresses are shifted back to their original values.
+There might be some other bootloop cases for which heap buffer addresses have shifted too much and we don't have enough loose (can't delete any variables) in nvram to shift them back to their original value or if we simply want to be able to modify nvram content in case we really have to do it (ex. adding <span class="cli">boot-partition</span> variable).
+
+<p align="justify">
+To have a failsafe for such cases, I highly recommand to do the following procedure.
+</p>
+
+The nvram content can be easily modified from userland, using the <span class="cli">nvram</span> command on a jailbroken environment.
+</p>
+
+<p align="justify">
+From a SSH connection, run <span class="cli">nvram -p</span> to print nvram variables and their value.
+</p>
+
+<img class="align" src="resources/trigger_hbo-nvram_print_initial.png">
+
+<p align="justify">
+Note that your device might have more or less variables and or different values in its nvram than mine.
+</p>
+
+<p align="justify">
+I recommand delete all event-related variables such as "obliteration", "panic" and similar ones if there are any using <span class="cli">nvram -d [variable]</span>. The best is to keep only the least possible like I did for the screenshot above in order to avoid later nvram changes.
+Once this is done, add <span class="cli">boot-partition</span> variable in nvram and set its value to <span class="cli">0</span>. This will makes iBoot set its boot partition index as <span class="cli">0</span>, which is same value as its default hardcoded <span class="cli">boot-partition</span> variable. This won't change anything because <span class="cli">0</span> is the default index iBoot uses for the main OS partition. We do this because eventually we will set this value to <span class="cli">2</span> in order to boot our <span class="cli">Exploit</span> partition.
+</p>
+
+<span class="cli">nvram boot-partition=0</span>
+
+<p align="justify">
+Now, we will add some loose to nvram by adding some random variable with random values like this.
+<br></br>
+<span class="cli">nvram a=1</span>
+<br></br>
+<span class="cli">nvram b=2</span>
+<br></br>
+<span class="cli">nvram c=3</span>
+<br></br>
+<span class="cli">nvram d=4</span>
+<br></br>
+<span class="cli">nvram e=5</span>
+<br></br>
+<span class="cli">nvram f=6</span>
+</p>
+
+<p align="justify">
+So, if heap buffer addresses have shifted and the solution is to remove some data from nvram, this is still possible to delete some of those dummy ones and hopefully recover our exploit implementation. This can also be helpful in case you realize that you have forgotten to add <span class="cli">boot-partition</span> after implementing the whole exploit.
+</p>
+
+The expected nvram content should looks like this.
+
+<img class="align" src="resources/trigger_hbo-nvram_print_final.png">
+
+<br></br>
+
+Next, wipe completely the <span class="cli">Exploit</span> partition by overwriting it with zeroes usign dd.
+
+<p class="cli">iPad-k94ap#dd if=/dev/zero of=/dev/rdisk0s1s3 bs=8192</p>
+
+<img class="align" src="resources/trigger_hbo-dd_zero_exploit_partition.png">
+
+<p align="justify">
+We want to write back those five blocks we dumped at their original position, so iBoot's HFS+ driver can parse a valid HFS+ filesystem. To make things easier when writing blocks back to their original position, let's build a small shell script called <span class="cli">exploit.sh</span>. This script will contains all dd commands we must run in order to write any blocks we want into the "Exploit" partition. Eventually, we will write some blocks containing our exploit implementation, such as TLB, iBoot images and shellcode.
+</p>
+
+<br></br>
+
+<br></br>
+
+Create a new empty file called <span class="cli">exploit.sh</span> in the <span class="cli">/exploit</span> folder using <span class="cli">nano</span>.
+<p class="cli">iPad-k94ap#nano exploit.sh</p>
+ 
+Use the following model to build up the script.
+<pre><code>
+#!/bin/bash
+#echo "Writing corrupted HFS+ header..."
+ 
+#echo "Writing TLB..."
+ 
+#echo "Overwritting iBoot..."
+ 
+#echo "Writing shellcode..."
+ 
+#echo "Writing new iBoot image..."
+ 
+#echo "Writing framebuffer data..."
+</code></pre>
+
+<img class="align" src="resources/trigger_hbo-exploit_bash_script_model.png">
+ 
+Save the file, then make it executable.
+
+<p class="cli">iPad-k94ap#chmod +x exploit.sh</p>
+
+<img class="align" src="resources/trigger_hbo-exploit_bash_script_chmod.png">
+ 
+Our exploit implementation will consists of five main parts plus a facultative one.
+<ul>
+<li>Writing corrupted HFS+ header</li>
+ 
+<li>Writing TLB</li>
+ 
+<li>Overwriting iBoot</li>
+ 
+<li>Writing shellcode</li>
+ 
+<li>Writing new iBoot image</li>
+ 
+<li>Writing framebuffer data (facultative)</li>
+</ul>
+ 
+For each part, we will use one or more dd commands, depending of what data we need to write into the <span class="cli">Exploit</span> partition. With the HFS+ blocks we dumped earlier, we can complete the first point <i>Writing corrupted HFS+ header</i>.
+<br></br>
+Add the following dd commands to the <span class="cli">exploit.sh</span> script, under the first <span class="cli">echo</span>. Uncomment the <span class="cli">echo</span> line, to see what the script is doing.
+ 
+<p class="cli">dd if=hfs_block_0x400.bin of=/dev/rdisk0s1s3 bs=8192</p>
+ 
+<img class="align" src="resources/trigger_hbo-exploit_bash_script_hfs_block_400.png">
+ 
+<p class="cli">dd if=hfs_block_28E000.bin of=/dev/rdisk0s1s3 bs=8192 seek=327 count=1</p>
+ 
+<img class="align" src="resources/trigger_hbo-exploit_bash_script_hfs_block_28e000.png">
+ 
+<p class="cli">dd if=hfs_block_80A000.bin of=/dev/rdisk0s1s3 bs=8192 seek=1029 count=1</p>
+ 
+<img class="align" src="resources/trigger_hbo-exploit_bash_script_hfs_block_80a000.png">
+
+<p class="cli">dd if=hfs_block_0x100A000.bin of=/dev/rdisk0s1s3 bs=8192 seek=2053 count=1</p>
+
+<img class="align" src="resources/trigger_hbo-exploit_bash_script_hfs_block_100a000.png">
+
+<p class="cli">dd if=hfs_block_0x1214000.bin of=/dev/rdisk0s1s3 bs=8192 seek=2314 count=1</p>
+ 
+<img class="align" src="resources/trigger_hbo-exploit_bash_script_hfs_block_1214000.png">
+ 
+Note that we calculated the "seek" value for those dd commands previously, this is the block position value in decimal (between parenthesis).
+<br></br>
+<ul>
+<li>
+<p align="justify">
+Block 1: offset = 0x400
+</p>
+
+0x400 / 0x2000 = 0x0 (obviously the first block of the partition, 0)
+</li>
+<br></br>
+<li>
+<p align="justify">
+Block 2: offset = 0x100A000
+</p>
+
+0x100A000 / 0x2000 = 0x805 (2053)
+</li>
+<br></br>
+<li>
+<p align="justify">
+Block 3: offset=0x80A000
+</p>
+
+0x80A000 / 0x2000 = 0x405 (1029)
+</li>
+<br></br>
+<li>
+<p align="justify">
+Block 4 : offset = 0x1214000
+</p>
+
+0x1214000 / 0x2000 = 0x90A (2314)
+</li>
+<br></br>
+<li>
+<p align="justify">
+Block 5 : offset = 0x28E000
+</p>
+
+0x28E000 / 0x2000 = 0x147 (327)
+</li>
+</ul>
+
+<br></br>
+At this point, the exploit.sh script should looks like this.
+ 
+<img class="align" src="resources/trigger_hbo-exploit_bash_script_hfs_block_1214000.png">
+ 
+Run it and watch it re-write a partial HFS+ filesystem on your <span class="cli">Exploit</span> partition!
+<br></br>
+Let's see if blocks were properly written, lauch kloader with our <span class="cli">HFSReadBlock()</span> wrapper iBoot.
+<p class="cli">iPad-k94ap#kloader /bootloaders/iBoot.k94ap.RELEASE_HFSReadWrapper.bin</p>
+ 
+If things worked properly, you should get the same panic as before we wiped the partition.
+ 
+<img class="align" src="resources/trigger_hbo-hfsreadblock_wrapper_panic_translation_error.png">
+
+<br></br>
+<center><a href="dump_overwrite_tlb.html" class="menu"><b>> Part 8:</b> Dump and overwrite TLB</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2020 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>
