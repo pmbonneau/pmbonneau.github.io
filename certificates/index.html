@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<link rel="icon" href="../../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+<meta name="description" content="SSL Certificates"> 
+<meta name="keywords" content="SSL,Certificates,Cydia"> 
+
+<title>Updated SSL Certificates for Let's Encrypt</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<div>
+	<h1><center>Updated SSL Certificates for Let's Encrypt</center></h1>
+	<center>Some old web browsers don't have updated Root certificate for sites that use Let's Encrypt SSL. So, those browsers will most likely return security errors or not work at all when visiting websites that are signed with newer certificates.</center>
+	<br></br>
+	<center>A potential solution for this issue is to manually install newer Let's Encrypt Root certificates.</center>
+	<br></br>
+	<h2>Let's Encrypt Root Certificates - ISRG Root X1</h2>
+
+	<div class="separator"></div>
+	
+		<p class="cell">
+		<b>Self-signed</b>
+		<ul>
+			<li>PEM format [<a href="./downloads/isrg_root_x1.pem">Certificate (.pem)</a>][<a href="https://letsencrypt.org/certs/isrgrootx1.pem">Original source</a>]</li>
+			<li>DER format [<a href="./downloads/isrg_root_x1.der">Certificate (.der)</a>][<a href="https://letsencrypt.org/certs/isrgrootx1.der">Original source</a>]</li>
+		</ul>
+		<div class="separator"></div>
+		
+		<p class="cell">
+		<b>Cross-signed by DST Root CA X3</b>
+		<ul>
+			<li>PEM format [<a href="./downloads/isrg_root_x1_cs.pem">Certificate (.pem)</a>][<a href="https://letsencrypt.org/certs/isrg-root-x1-cross-signed.pem">Original source</a>]</li>
+			<li>DER format [<a href="./downloads/isrg_root_x1_cs.der">Certificate (.der)</a>][<a href="https://letsencrypt.org/certs/isrg-root-x1-cross-signed.der">Original source</a>]</li>
+		</ul>
+		<div class="separator"></div>
+
+		<p class="cell">
+		<b>SHA256 Hashes</b>
+		<ul>
+			<li>isrg_root_x1.pem : 22b557a27055b33606b6559f37703928d3e4ad79f110b407d04986e1843543d1</li>
+			<li>isrg_root_x1.der : 96bcec06264976f37460779acf28c5a7cfe8a3c0aae11a8ffcee05c0bddf08c6</li>
+			<li>isrg_root_x1_cs.pem : 95cc1c24329edc615041294538dfb21329930d8dffdcf33136173aa94734a28c</li>
+			<li>isrg_root_x1_cs.der : 6d99fb265eb1c5b3744765fcbc648f3cd8e1bffafdc4c2f99b9d47cf7ff1c24f</li>
+		</ul>
+		<div class="separator"></div>
+	</div>
+
+</div>
+<br></br>
+
+<footer>
+	Copyright © 2024 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

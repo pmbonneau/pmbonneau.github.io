@@ -1,0 +1,8 @@
+Origin: PMBonneau's Repository
+Label: PMBonneau's Repository
+Suite: stable
+Version: 1.0
+Codename: PMBCY140424PR
+Architectures: iphoneos-arm
+Components: main
+Description: Pierre-Marc Bonneau's Official Cydia Repository. Disclaimer : Some packages might have been compiled by third-parties and could not be thoroughly checked for potential malicious code. No warranties given, use this repository at your own risk.
