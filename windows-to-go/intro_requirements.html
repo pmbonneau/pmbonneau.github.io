@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="fr-CA">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>Installation de Windows sur un disque amovible - Introduction et prérequis</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Introduction et prérequis</h1>
+
+<p align="justify">
+Lorsque l'on effectue une installation habituelle de Windows, c'est un disque interne branché SATA (ou autre type de contrôlleur) que l'on va choisir pour accueillir le nouveau système.
+	Dans la dernière étape, l'assistant d'installation de Windows fait un inventaire des disques compatibles puis propose de choisir sur lequel installer le système.
+</p>
+
+<p align="justify">
+On sélectionne alors le disque désiré, puis on clique sur le bouton suivant. L'assistant préparera des partitions additionnelles (EFI et récupération Windows) et lancera ensuite l'installation de Windows.
+</p>
+
+<br></br>
+
+<b>Le problème</b>
+
+<p align="justify">
+L'assistant d'installation de Windows ne propose pas les périphériques de stockage amovibles lors de l'étape de sélection du disque.
+</p>
+
+<img class="align" src="resources/intro_requirements-windows_setup_no_disks.jpg">
+
+<p align="justify">
+Ceci fait en sorte qu'il n'est pas possible de choisir une clé USB, un disque dur externe, une carte mémoire ou autre périphériques de ce type comme destination pour installer le système lorsque l'on utilise directement le média d'installation.
+Il est à noter que Mac OS ainsi que la plupart des distributions Linux permettent de choisir un disque amovible en tant que destination pour le <i>root filesystem</i>.
+</p>
+
+<p align="justify">
+Depuis Windows 7, Microsoft propose un moyen de pouvoir parvenir à cette fin. Cependant, cette fonctionalité nommée <i>Windows to Go</i> ou WTG est destiné aux entreprises et non à l'Utilisateur général. C'est probablement pour cela que l'assistant d'installation est limité sur ce point.
+</p>
+
+<p align="justify">
+Pour y parvenir, il y a deux options.
+</p>
+
+<ul>
+	<li>Utiliser un logiciel qui fait le tout de façon automatisée tel que AOMEI Partition Assistant ou encore, Rufus</li>
+	<li>Utiliser ses habiletés en <i>cmd</i> Windows et effectuer le tout manuellement.</li>
+</ul>
+
+<p align="justify">
+Cette dernière option sera celle couverte par ce guide. Nous allons effectuer une installation de <i>Windows to Go</i> sur une carte microSD SanDisk Extreme de 128 Go (160r/90w) classe 10 + U3 + V30 comme celle-ci.
+</p>
+
+<img class="align" src="resources/intro_requirements-sandisk_u3_sd_card.jpg">
+
+<p align="justify">
+La procédure fonctionne également avec les clés USB, disques externes ainsi que d'autre carte mémoires. Notez que plus la vitesse du périphérique est rapide, plus le système le sera. Un périphérique plus lent résultera en une installation plus ou moins utilisable, dépendant de la vitesse de lecture et d'écriture.
+</p>
+
+<p align="justify">
+Concernant les cartes mémoire, voici mes recommandations.
+<ul>
+	<li>Type : Au minimum (80r/80w) classe 10 + U1</li>
+	<li>Capacité de stockage : Au minimum 32 Go</li>
+</ul>
+</p>
+
+<img class="align" src="resources/intro_requirements-emtec_u1_sd_card.jpg">
+
+<p align="justify">
+Ci-haut, une carte mémoire EMTEC de 32 Go (85r/85w) classe 10 + U1 qui devrait être suffisante au minimum pour utiliser un système <i>Windows to Go</i>.
+</p>
+
+<br></br>
+<center><a href="download_windows.html" class="menu"><b>> Partie 1:</b> Télécharger l'image disque Windows</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2022 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

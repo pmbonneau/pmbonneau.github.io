@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="fr-CA">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>Installation de Windows sur un disque amovible - Partitionner le disque amovible</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Partitionner le disque amovible</h1>
+
+<p align="justify">
+Dans la partie précédente, nous avons téléchargé l'image disque .iso de Windows 10 et monté celle-ci dans un lecteur DVD virtuel accessible depuis l'explorateur de fichiers. Nous avons mis en place tout ce qui est nécessaire pour effectuer l'installation sur le disque amovible.
+</p>
+
+<p align="justify">
+Tel que mentionné dans l'introduction de ce tutoriel, je vais utiliser une carte microSD SanDisk Extreme de 128 Go (160r/90w) classe 10 + U3 + V30 comme celle-ci pour y installer Windows 10.
+</p>
+
+SD screenshot here
+
+<p align="justify">
+Cette même carte mémoire sera utilisé tout au long de ce tutoriel.
+</p>
+
+<p align="justify">
+Dans pratiquement tous les cas, une carte mémoire est formatée en usine et prête à l'emploi. On y retrouve généralement un système de fichier FAT32 ou bien exFAT.
+</p>
+
+<p align="justify">
+<b>Il est hautement recommandé de faire un «wipe» (effacement) de la table de partitions afin de repartir à zéro avec une carte mémoire vierge</b>.
+</p>
+
+<p align="justify">
+Nous allons devoir recréer cette table en utilisant le format GPT, il est fort probable que les périphériques de stockage amovibles sortent de l'usine en utilisant MBR. En effet, partitionner une carte mémoire ou une clé USB n'est vraiment pas une pratique courante.
+</p>
+
+<p align="justify">
+Pour effectuer l'effacement de seulement la table de partition sur un périphérique de stockage, il suffit d'utiliser la commande dd qui est présente sur la plupart des systèmes basés UNIX. Vous pouvez démarrer votre ordinateur à partir d'un live CD Ubuntu par exemple pour avoir accès facilement à l'utilitaire en question.
+</p>
+
+<p align="justify">
+<b>Attention!</b> La commande dd permet d'écrire littéralement n'importe quoi sur n'importe quoi, il y a risque d'erreur et donc perte de données. Débrancher tout autre périphérique de stockage externe et soyez certain que vos disques durs internes ne contiennet également aucune données importantes avant de procéder.
+</p>
+
+<p align="justify">
+Voici la syntaxe de la commande dd pour effacer les <span class="cli">bs * count</span> premiers octets d'un périphérique de stockage.
+</p>
+
+<p class="cli">dd if=[<i>device en entrée</i>]of=[<i>device en sortie</i>] bs=[<i>taille de bloc</i>] count=[<i>nombre de blocs</i>]</p>
+
+<p align="justify">
+Un exemple d'utilisation pour effacer les quatre premiers giga-octets de la carte mémoire 128 Go utilisée pour ce tutoriel. Note, il faut être en root pour pouvoir écrire directement sur un périphérique.
+</p>
+
+<p class="cli">dd if=/dev/zero of=/dev/sdb bs=4096M count=1024</p>
+
+<p align="justify">
+Voici la signification de chacun des paramètres.
+</p>
+
+<p align="justify">
+<ul>
+	<li>if=[<i>device en entrée</i>] : Le périphérique source, écrire des zéros est suffisant juste pour effacer (pas sécuritairement).</li>
+	<li>of=[<i>device en sortie</i>] : Le périphérique de sortie, ici ma carte mémoire est sur /dev/sdb. Pour trouver le bon chemin de périphérique, utiliser un éditeur de partition comme gparted présent sur plusieurs live CDs. Celui-ci devrait donner le chemin avec le nom du fabricant et numéro de model dans la liste des périphérique disponibles.</li>
+	<li>bs=[taille de bloc(<i>s</i>)] : Écrire s octets à la fois pour un bloc</li>
+	<li>count=[nombre de bloc(<i>n</i>)] : Écrire <i>n</i> blocs</li>
+</ul>
+</p>
+
+<p align="justify">
+Une fois la table de partition effacée, le périphérique de stockage devient comme non-initialisé. Il est prêt à être re-partitionné.
+</p>
+
+<p align="justify">
+Connecter le périphérique amovible sur un ordinateur exécutant Windows 10, idéalement la même version qui sera installée sur le dit périphérique (par exemple l'ordinateur sous Windows 10 20H2 et l'image Windows ISO de la version 20H2 aussi. Probablement que la procédure fonctionne avec différentes versions, mais ceci est à vérifier.
+</p>
+
+<p align="justify">
+Si le message suivant s'affiche suite à l'insertion du périphérique amovible, faire tout simplement «Annuler» pour ne pas le formater tout de suite. Il semblerait que ce soit les cartes mémoires insérées dans les lecteurs de cartes font apparaître ce message, pas les clés USB ni les disques durs externes.
+</p>
+
+<img class="align" src="resources/partition_device-format_prompt.jpg">
+
+<br></br>
+
+<p align="justify">
+Aller dans le gestionnaire de Windows. Faire clique-droit sur l'icône «Poste de Travail» (ou «Ordinateur»), puis «Gérer».
+</p>
+
+<img class="align" src="resources/partition_device-computer_management.jpg">
+
+<br></br>
+
+<p align="justify">
+Dans le menu à gauche, cliquer sur «Gestion des disques» dans le sous-menu «Stockage».
+</p>
+
+<img class="align" src="resources/partition_device-disk_manager_raw.jpg">
+
+<br></br>
+
+<p align="justify">
+On y voit alors tous les périphériques de stockage détectés par Windows avec plusieurs informations sur eux tels que la capacité totale, utilisée ainsi que le point de montage (lettre de lecteur) et plusieurs autres.
+</p>
+
+<p align="justify">
+Notre carte SD de 128 Go est montée en tant que <span class="cli">F:/</span> et vue par Windows comme étant au format RAW. Ce format veut généralement dire non-reconnu ou corrompu dans un environnement Windows. Ce qui est en quelque sorte normal, car la carte SD ne contient pas de table de partition. Cependant, Windows demande normalement d'initialiser le lecteur lorsqu'il n'y a pas de table de partition trouvée. Probablement qu'il voit cela différent pour les cartes SD et les affiche directement comme étant RAW. 
+</p>
+
+<p align="justify">
+Cette partition RAW n'a aucune raison d'être sur un disque vide, nous allons donc supprimer celle-ci. Clique droit sur la partition en question de la carte SD, puis «Supprimer le volume».
+</p>
+
+<img class="align" src="resources/partition_device-disk_manager_delete_raw.jpg">
+
+<br></br>
+
+<p align="justify">
+L'espace devient alors «Non-alloué» et donc prêt à être utilisé pour de nouvelles partitions.
+</p>
+
+<img class="align" src="resources/partition_device-disk_manager_unallocated_sd.jpg">
+
+<br></br>
+
+<p align="justify">
+Cependant, tel que mentionné ci-haut, Windows ne nous a pas présenté l'écran d'initialisation pour un périphérique de stockage sans table de partition alors que normalement il aurait dû. C'est comme si l'initialisation avait été fait de façon transparente. Le problème c'est que le périphérique semble avoir été initialisé avec le schéma de partitionnement MBR (Master Boot Record) alors que pour que ce soit démarrable, il est préférable d'utiliser GPT (GUID partition table).
+</p>
+
+<p align="justify">
+Il faut donc changer le type de la table de partition, ce qui est au meilleur cas lorsqu'il n'y a aucune partition sur le volume. Pour ce faire, nous utilisons un outil intégré à Windows nommé DiskPart. C'est un outil en ligne de commandes qui permet d'effectuer toutes les opérations que l'on peut faire dans l'interface graphique du gestionnaire de disques avec en plus de certaines autres plus avancées dont on aura besoin pour la suite.
+</p>
+
+<p align="justify">
+Exécuter cmd.exe en tant qu'administrateur système.
+</p>
+
+<img class="align" src="resources/partition_device-open_cmd_admin.jpg">
+
+<br></br>
+
+<p align="justify">
+Exécuter diskpart tout simplement avec la commande <span class="cli">diskpart</span>.
+</p>
+
+<img class="align" src="resources/partition_device-cmd_diskpart.jpg">
+
+<br></br>
+
+<p align="justify">
+Voir la liste des disques détectés par Windows, avec la commande suivante.
+</p>
+
+<p class="cli">list disk</p>
+
+<p align="justify">
+Avec sa taille (120 Go), il est facile de voir que notre carte SD porte l'ID <span class="cli">Disque 1</span> puisque c'est le seul disque que j'ai qui a cette taille. Si vous avez des disques de même taille, il est possible de retourner au gestionnaire de disques et de vérifier l'ID de celui qui est actuellement non-alloué.
+</p>
+
+<img class="align" src="resources/partition_device-cmd_diskpart_list_disk.jpg">
+
+<br></br>
+
+<p align="justify">
+Remarque : Pour un disque utilisant le schéma de table MBR, il n'y a pas d'astérix (*) à la fin de la ligne du disque (après "octet" dans la sortie de DiskPart). Pour un disque en GPT, il y a un astérix.
+</p>
+
+<p align="justify">
+Sélectionner le disque correspondant à la carte SD, ici c'est l'ID <span class="cli">Disque 1</span> (faire attention à en être bien certain).
+</p>
+
+<p class="cli">select disk [ID]</p>
+
+<img class="align" src="resources/partition_device-cmd_diskpart_select_disk_1.jpg">
+
+<br></br>
+
+<p align="justify">
+On vérifie en demandant la liste des partitions de ce disque, normalement il devrait y en avoir aucune.
+</p>
+
+<p class="cli">list partition</p>
+
+<img class="align" src="resources/partition_device-cmd_diskpart_list_partition.jpg">
+
+<br></br>
+
+<p align="justify">
+Nous allons utiliser la commande <span class="cli">convert [type]</span> pour convertir le disque sélectionné de MBR vers GPT. Voir la syntaxe de la commande en entrant la commande suivante.
+</p>
+
+<p class="cli">help convert</p>
+
+<img class="align" src="resources/partition_device-cmd_diskpart_help_convert.jpg">
+
+<br></br>
+
+<p align="justify">
+Convertir le disque sélectionné avec la commande suivante.
+</p>
+
+<p class="cli">convert GPT</p>
+
+<img class="align" src="resources/partition_device-cmd_diskpart_convert_gpt.jpg">
+
+<br></br>
+
+<p align="justify">
+Ne pas fermer l'invite de commandes maintenant, nous allons en avoir besoin pour plus tard. Retourner dans le gestionnaire de disques Windows, nous sommes prêts à partitionner le périphérique amovible.
+</p>
+
+<p align="justify">
+Nous allons créer deux partitons sur le périphérique amovible, soit une utilisée pour le démarrage et une autre pour le système d'exploitation. Choisir le disque correspondant à la carte SD qui est normalement tout non-alloué, clique-droit puis faire «Nouveau volume simple...».
+</p>
+
+<img class="align" src="resources/partition_device-disk_manager_new_volume_efi.jpg">
+
+<br></br>
+
+<p align="justify">
+Il s'agit ensuite de suivre l'assistant de création d'un nouveau volume simple. Cliquer sur le bouton «Suivant».
+</p>
+
+<img class="align" src="resources/partition_device-new_volume_wizard_welcome.jpg">
+
+<br></br>
+
+<p align="justify">
+La première partition que nous devons créer est celle qui contiendra les fichiers de démarrage du système d'exploitation. Plus précisément, ce sera la partition EFI (Extensible Firmware Interface). Celle-ci est nécessaire lorsque l'ordinateur utilise UEFI, celui-ci cherchera un chargeur d'amorçage de second niveau stocké sur cette partition pour poursuivre le démarrage.
+Généralement, une taille de 128 Mo est largement suffisante pour cette partition (le minimum recommandé étant 100 Mo selon Microsoft).
+</p>
+
+<p align="justify">
+Choisir 128 Mo, puis faire «Suivant».
+</p>
+
+<img class="align" src="resources/partition_device-new_volume_wizard_efi_size.jpg">
+
+<br></br>
+
+<p align="justify">
+Sélectionner le chemin pour le lecteur, n'importe quelle lettre libre fera l'affaire. Je choisis <span class="cli">G:/</span> pour la partition EFI. Faire ensuite «Suivant» pour continuer.
+</p>
+
+<img class="align" src="resources/partition_device-new_volume_wizard_efi_letter.jpg">
+
+<br></br>
+
+<p align="justify">
+À l'écran de formatage, choisir les options suivantes.
+<ul>
+	<li>Système de fichiers : FAT32</li>
+	<li>Taille d'unité d'allocation : Par défaut</li>
+	<li>Nom de volume : EFI</li>
+</ul>
+Cocher également l'option «Effectuer un formatage rapide» et faire «Suivant».
+</p>
+
+<img class="align" src="resources/partition_device-new_volume_wizard_format_efi.jpg">
+
+<br></br>
+
+<p align="justify">
+Vérifier qu'il n'y a pas d'erreurs dans les options choisies, puis faire «Terminer» pour fermer l'assistant.
+</p>
+
+<img class="align" src="resources/partition_device-new_volume_wizard_efi_summary.jpg">
+
+<br></br>
+
+<p align="justify">
+Après quelques secondes, la partition <span class="cli">EFI</span> sera crée.
+</p>
+
+<p align="justify">
+La procédure est semblable pour créer la partition du système d'exploitation. Choisir la partition non-allouée sur le disque correspondant à la carte SD, clique-droit puis faire «Nouveau volume simple...».
+</p>
+
+<img class="align" src="resources/partition_device-disk_manager_new_volume_datastore.jpg">
+
+<br></br>
+
+<p align="justify">
+Suivre ensuite l'assistant de création d'un nouveau volume simple. Cliquer sur le bouton «Suivant».
+</p>
+
+<img class="align" src="resources/partition_device-new_volume_wizard_welcome.jpg">
+
+<br></br>
+
+<p align="justify">
+Ici, choisir la taille voulue pour la partition du système d'exploitation. Généralement, on prend la taille maximale possible afin d'utiliser tout le disque. Cependant, rien ne vous empêche de laisser de l'espace non-allouée pour créer des partitions supplémentaires (données par exemple).
+Cliquer ensuite sur le bouton «Suivant» pour continuer.
+</p>
+
+<img class="align" src="resources/partition_device-new_volume_wizard_datastore_size.jpg">
+
+<br></br>
+
+<p align="justify">
+Sélectionner le chemin pour le lecteur, n'importe quelle lettre libre fera l'affaire. Je choisis <span class="cli">H:/</span> pour la partition du système d'exploitation. Faire ensuite «Suivant» pour continuer.
+</p>
+
+<img class="align" src="resources/partition_device-new_volume_wizard_datastore_letter.jpg">
+
+<br></br>
+
+<p align="justify">
+À l'écran de formatage, choisir les options suivantes.
+<ul>
+	<li>Système de fichiers : NTFS</li>
+	<li>Taille d'unité d'allocation : Par défaut</li>
+	<li>Nom de volume : ["Datastore" si démarrage sur VHD, "Windows" si démarrage traditionnel]</li>
+</ul>
+Cocher également l'option «Effectuer un formatage rapide» et faire «Suivant».
+</p>
+
+<p align="justify">
+Note : Choisir le nom de volume selon la méthode d'installation du système voulue. Pour ce tutoriel, l'installation de Windows sera effectuée sur un disque virtuel (VHD) et le chargeur d'amorçage sera configuré pour démarrer sur ce disque. Nous allons voir dans la prochaine section comment effectuer ce type d'installation. Cependant, ceci est facultatif, vous pourrez installer Windows directement sur la partition que nous allons créer.
+</p>
+
+<img class="align" src="resources/partition_device-new_volume_wizard_format_datastore.jpg">
+
+<br></br>
+
+<p align="justify">
+Vérifier qu'il n'y a pas d'erreurs dans les options choisies, puis faire «Terminer» pour fermer l'assistant.
+</p>
+
+<img class="align" src="resources/partition_device-new_volume_wizard_datastore_summary.jpg">
+
+<br></br>
+
+<p align="justify">
+Après quelques secondes, la partition sera crée.
+</p>
+
+<img class="align" src="resources/partition_device-disk_manager_partitionned.jpg">
+
+<p align="justify">
+Nos partitions sur le disque amovible sont prêtes à être utilisées. Pour l'installation de Windows, nous avons deux options de configuration possible.
+<ul>
+	<li><p align="justify">Installation sur un disque dur virtuel : On crée un conteneur qui agit comme un disque dur standard mais qui est sous forme d'un fichier sur un disque physique. Le disque dur virtuel sera partitionné, puis le système Windows sera installé sur cette partition.</p></li>
+	<li><p align="justify">Installation traditionnelle : Le système Windows est installé directement sur une partition du disque physique. C'est comme sur un ordinateur standard.</p></li>
+</ul>
+</p>
+
+<p align="justify">
+Continuer avec la partie 3 de ce guide si vous voulez utiliser la méthode du démarrage sur VHD, sinon la partie 4 pour passer directement à l'installation du système Windows. Note, les avantages de la méthode avec le VHD sont présentés dans la partie 3.
+</p>
+
+<br></br>
+<center><a href="prepare_vhd.html" class="menu"><b>> Partie 3:</b> Préparer le VHD</a></center><br>
+<center><a href="install_windows.html" class="menu"><b>> Partie 4:</b> Installer le système Windows</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2022 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

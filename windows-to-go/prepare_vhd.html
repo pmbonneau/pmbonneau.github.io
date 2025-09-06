@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="fr-CA">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>Installation de Windows sur un disque amovible - Préparer le VHD</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Préparer le VHD</h1>
+
+<p align="justify">
+Cette partie du guide est facultative, car vous pourriez tout simplement installer le système Windows directement sur la seconde partition que nous avons créee précédemment et tout fonctionnera normalement.
+</p>
+
+<p align="justify">
+L'utilisation d'un VHD est cependant tout de même pertinente surtout dans le cas d'une installation sur un périphérique amovible, en voici certains avantages.
+</p>
+
+<p align="justify">
+<ul>
+	<li><p align="justify">Déploiement, sauvegardes et restaurations simples : Un VHD est un fichier image qui contient l'entièreté du système Windows 10, il suffit de le copier ailleurs pour en faire une sauvegarde. Il en va de même pour restaurer ou faire du déploiement sur plusieurs périphériques amovibles. Note que dans certains cas, la partition EFI doit être créer pour que le démarrage fonctionne.</p></li>
+	<li><p align="justify">Isole Windows sur le périphérique amovible : Intéressant si vous voulez utiliser par exemple votre clé USB pour autre usage que démarrer sur Windows 10. Le seul fichier que vous allez voir sur la clé USB est l'image du VHD, vous ne serez pas embarrassé par les milliers de fichiers du système.</p></li>
+</ul>
+</p>
+
+<p align="justify">
+La première étape consiste à créer le fichier image du disque dur virtuel au format VHD. Ce dernier est supporté par Microsoft, donc on le retrouve intégré à l'environnement de Windows. Pour créer un VHD, nous avons deux options, soit par le gestionnaire de disques ou bien en ligne de commandes. Ici, nous allons procéder par le gestionnaire de disques. Avant de créer le disque virtuel, nous devons calculer sa taille par rapport à l'espace disponible sur la partition «Datastore» (la seconde que nous avons crée dans la partie 2).
+Si on fait un clique-droit sur le volume «Datastore» <span class="cli">H:/</span> puis «Propriétés», nous allons voir les informations sur l'espace libre.
+</p>
+
+<img class="align" src="resources/prepare_vhd-datastore_volume_info.jpg">
+
+<br></br>
+
+<p align="justify">
+Nous avons exactement 127 630 041 088 octets d'espace libre sur notre partition. Idéalement, nous souhaitons que notre fichier VHD occupe au maximum possible l'espace libre de cette partition si le périphérique amovible va être utilisé seulement pour Windows to go.
+</p>
+
+<p align="justify">
+On commence par calculer l'espace libre total en Mo, car nous pouvons seulement choisir une taille de disque virtuel en Mo ou en Go.
+</p>
+
+<p align="justify">
+127 630 041 088 octets / 1024 /1024 = 121 717 Mo libres.
+</p>
+
+<p align="justify">
+Il est fortement recommandé de conserver au minimum un 2 Go de libre sur la partition, d'un coup qu'il y aurait augmentation imprévue de la taille du disque virtuel et ou autres données inscrites par le système d'exploitation.
+</p>
+
+<p align="justify">
+Si vous voulez choisir une taille en Go, simplement multiplier celle-ci par 1 024 et s'assurer que la valeur en Mo obtenue soit plus petite de 2 048 Mo que la taille en Mo calculée ci-haut.
+</p>
+
+<p align="justify">
+Ici, j'aimerais que mon disque virtuel ait 116 Go, donc je fais ceci.
+</p>
+
+<p align="justify">
+116 Go * 1024 = 118 784 Mo
+</p>
+
+<p align="justify">
+Il restera alors 121 717 Mo - 118 784 Mo = 2 933 Mo d'espace disponible sur la partition après la création du disque virtuel.
+</p>
+
+<p align="justify">
+La taille de notre disque sera donc de 118 784 Mo. Pour créer ce disque virtuel, retourner dans le gestionnaire de disque Windows.
+</p>
+
+<p align="justify">
+Dans celui-ci, il suffit simplement de cliquer sur «Autres actions» dans le menu à droite, puis faire «Créer un disque dur virtuel».
+</p>
+
+<img class="align" src="resources/prepare_vhd-disk_manager_create_vhd.jpg">
+
+<br></br>
+
+<p align="justify">
+La fenêtre de création d'un disque virtuel apparaît alors. Commencer par entrer la taille choisie en Mo. 
+</p>
+
+<p align="justify">
+Ensuite, pour le format du disque virtuel, il y a deux choix possibles soit le VHD ou le VHDX. Pour une installation de Windows 10, choisir tout simplement VHDX.
+Ce format est la version améliorée du VHD standard et propose de nombreux avantages tels que le support d'une plus grande capacité et surtout une meilleure résistance aux pannes (très intéressant surtout sur un périphérique amovible).
+</p>
+
+<p align="justify">
+Pour le type du disque virtuel, nous avons deux choix.
+<ul>
+	<li><p align="justify">La taille fixe fera en sorte que le fichier image occupera par exemple les 118 784 Mo au départ, même si rien n'est écrit sur le disque. L'espace est réservée d'avance.</p></li>
+	<li><p align="justify">L'extension dynamique crée un petit fichier image de quelques Mo, mais celui-ci augmentera de taille au fur et à mesure que des données seront écrites.</p></li>
+</ul>
+</p>
+
+<p align="justify">
+Choisir la taille fixe, même si l'extension dynamique est recommandée pour éviter les surprises surtout si vous avez fait erreur dans le calcul de la taille maximale.
+</p>
+
+<p align="justify">
+Finalement, l'emplacement où sera stocké le fichier en cliquant sur le bouton «Parcourir». Choisir le lecteur <span class="cli">H:/</span> qui est la partition «Datastore».
+</p>
+
+<img class="align" src="resources/prepare_vhd-disk_manager_create_vhd_settings.jpg">
+
+<br></br>
+
+<p align="justify">
+Cliquer ensuite sur le bouton «OK» pour lancer le processus de création du disque virtuel. Celui-ci peut prendre plusieurs heures selon la taille choisie et la vitesse d'écriture du périphérique amovible. La progression en pourcentage est affichée en bas à droite de la fenêtre du gestionnaire de disque.
+</p>
+
+<img class="align" src="resources/prepare_vhd-disk_manager_creating_progress.jpg">
+
+<br></br>
+
+<p align="justify">
+Une fois le processus terminé, le nouveau disque virtuel sera automatiquement attaché. Celui-ci est non-initialisé tout comme un disque dur physique neuf.
+</p>
+
+<img class="align" src="resources/prepare_vhd-disk_manager_uninitialized_vhd.jpg">
+
+<br></br>
+
+<p align="justify">
+Initialiser un disque signifie de créer une nouvelle table de partition. Faire clique-droit sur le disque virtuel nouvellement attaché (disque 2) puis choisir «Initialiser le disque».
+</p>
+
+<img class="align" src="resources/prepare_vhd-disk_manager_menu_initialize_vhd.jpg">
+
+<br></br>
+
+<p align="justify">
+La fenêtre d'initialisation de disques s'ouvre et deux choix s'offrent à nous, MBR ou bien GPT. Choisir GPT, car notre périphérique amovible est déja obligatoirement en GPT et que c'est très bien supporté par Windows 10. Il n'y a aucun avantage de choisir MBR dans ce cas. Cliquer ensuite sur «OK».
+</p>
+
+<img class="align" src="resources/prepare_vhd-disk_manager_initialize_vhd.jpg">
+
+<br></br>
+
+<p align="justify">
+Une fois initialisé, il est maintenant possible de créer une ou des partitions sur le disque virtuel. Nous allons en créer une seule pour le système Windows. Clique-droit sur l,espace non-alloué, puis faire «Nouveau volume simple».
+</p>
+
+<img class="align" src="resources/prepare_vhd-disk_manager_new_volume_vhd.jpg">
+
+<br></br>
+
+<p align="justify">
+Tel qu'effectué dans la partie précédente, il s'agit ensuite de suivre l'assistant de création d'un nouveau volume simple. Cliquer sur le bouton «Suivant».
+</p>
+
+<img class="align" src="resources/partition_device-new_volume_wizard_welcome.jpg">
+
+<br></br>
+
+<p align="justify">
+Prendre tout l'espace possible pour la nouvelle partition, c'est la seule que nous aurons à créer sur ce disque.
+</p>
+
+<img class="align" src="resources/prepare_vhd-new_volume_wizard_size.jpg">
+
+<br></br>
+
+<p align="justify">
+Sélectionner le chemin pour le lecteur, n'importe quelle lettre libre fera l'affaire. Je choisis <span class="cli">G:/</span> pour la partition Windows sur le VHD. Faire ensuite «Suivant» pour continuer.
+</p>
+
+<p align="justify">
+Note : Dans la partie précédente, j'avais déja attribué la lettre <span class="cli">G:/</span> pour la partition EFI, mais celle-ci s'est changée pour <span class="cli">F:/</span> suite à un redémarrage de mon ordinateur.
+</p>
+
+<img class="align" src="resources/prepare_vhd-new_volume_wizard_windows_letter.jpg">
+
+<br></br>
+
+<p align="justify">
+À l'écran de formatage, choisir les options suivantes.
+<ul>
+	<li>Système de fichiers : NTFS</li>
+	<li>Taille d'unité d'allocation : Par défaut</li>
+	<li>Nom de volume : Windows</li>
+</ul>
+Cocher également l'option «Effectuer un formatage rapide» et faire «Suivant».
+</p>
+
+<img class="align" src="resources/prepare_vhd-new_volume_wizard_format_windows.jpg">
+
+<br></br>
+
+<p align="justify">
+Vérifier qu'il n'y a pas d'erreurs dans les options choisies, puis faire «Terminer» pour fermer l'assistant.
+</p>
+
+<img class="align" src="resources/prepare_vhd-new_volume_wizard_windows_summary.jpg">
+
+<br></br>
+
+<p align="justify">
+Après quelques secondes, la partition <span class="cli">Windows</span> sera crée. Voici un aperçu de la configuration des disques que vous devriez avoir à cette étape-ci du guide.
+</p>
+
+<img class="align" src="resources/prepare_vhd-disk_manager_all_volumes_created.jpg">
+
+<br></br>
+
+<p align="justify">
+Si l'on va faire un tour dans l'explorateur Windows, ça devrait ressembler à ceci.
+</p>
+
+<img class="align" src="resources/prepare_vhd-windows_explorer_all_volumes_created.jpg">
+
+<br></br>
+
+<p align="justify">
+Note : Il est tout à fait normal que la partition «Datastore» soit presque pleine, puisque notre fichier de disque virtuel en taille fixe y occupe cet espace.
+</p>
+
+<p align="justify">
+Le VHD est maintenant prêt à acceuillir le système d'exploitation Windows. La quatrième partie de ce guide portera sur l'installation de celui-ci.
+</p>
+
+<br></br>
+<center><a href="install_windows.html" class="menu"><b>> Partie 4:</b> Installer le système Windows</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2022 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

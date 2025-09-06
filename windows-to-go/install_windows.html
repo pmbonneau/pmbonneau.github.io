@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="fr-CA">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>Installation de Windows sur un disque amovible - Installer Windows</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Installer Windows</h1>
+
+<p align="justify">
+Dans cette partie, nous allons procéder à l'installation de Windows 10 sur la partition allouée pour le système, soit physique ou sur VHD. Ce sera une installation de Windows par déploiement de l'image en mode ligne de commandes, sans interface graphique.
+</p>
+
+<p align="justify">
+C'est un outil nommé <span class="cli">dism</span> (<i>Deployment Image Servicing and Management</i>) fourni avec Windows qui permet d'effectuer ce type d'installation. Celui-ci permet de faire certaines opérations avec les images de type Windows <span class="cli">.wim</span> que l'on retrouve souvent sur le DVD amorçable du système.
+</p>
+
+<p align="justify">
+L'objectif est tout simplement d'appliquer l'image de Windows 10 sur la partition dédiée au système sur notre périphérique amovible. Afin d'utiliser <span class="cli">dism</span>, il nous faut l'image du système à installer. Pour Windows 10, elle se nomme <span class="cli">install.wim</span> et se trouve dans le répertoire <span class="cli">sources</span> du média d'installation amorçable.
+Notre image du DVD de Windows 10, téléchargée dans la première partie de ce guide devrait être déja montée. Ici, c'est sur le lecteur <span class="cli">E:/</span> qu'elle y est.
+</p>
+
+<p align="justify">
+Aller voir dans <span class="cli">E:/sources/</span> si l'image <span class="cli">install.wim</span> si retrouve. Elle devrait avoir une taille de plus de 4 Go.
+</p>
+
+<img class="align" src="resources/install_windows-install_wim_location.jpg">
+
+<br></br>
+
+<p align="justify">
+Cette image contient exactement les fichiers qui se retrouveronts sur le lecteur <span class="cli">C:/</span> du nouveau système une fois l'installation terminée. De plus, ce format d'image est capable de gérer plusieurs éditions de Windows (ex. Familiale, Professionel, etc.) en un seul fichier.
+</p>
+
+<p align="justify">
+Commençons par voir quels éditions de Windows 10 l'image <span class="cli">E:/sources/install.wim</span> permet d'installer. Pour ce faire, ouvrir l'invite de commande en tant qu'administrateur et entrer la commande suivante.
+</p>
+
+<p class="cli">dism /Get-WimInfo /WimFile:E:\sources\install.wim</p>
+
+<img class="align" src="resources/install_windows-cmd_dism_list_editions.jpg">
+
+<br></br>
+
+<p align="justify">
+Nous y retrouvons donc 5 éditions disponibles pour l'installation, index de 1 à 5. Si votre ordinateur a déja une clé d'activation numérique Windows 10 associée, vous devriez choisir la même édition. Ceci fera en sorte que votre installation de <i>Windows to Go</i> sera activée pour cet ordinateur. Sinon, choisir l'édition selon vos besoins.
+</p>
+
+<p align="justify">
+Pour ce guide, je vais choisir Windows 10 Famille et donc l'index 1.
+</p>
+
+<p align="justify">
+Appliquez l'image <span class="cli">E:/sources/install.wim</span> sur la partition destinée à Windows sur votre disque amovible.
+<ul>
+	<li>Si vous n'utilisez pas de VHD, écrire l'image sur la seconde partition (nommée «Windows») du disque amovible.</li>
+	<li>Si vous utilisez le VHD, écrire l'image sur la partition unique (nommée «Windows») du disque virtuel.</li>
+</ul>
+</p>
+
+<p align="justify">
+Ici, nous allons écrire l'image dans la partition «Windows» <span class="cli">G:/</span> qui se trouve sur le VHD.
+</p>
+
+<p align="justify">
+Toujours avec l'invite de commandes en tant qu'administrateur, entrer la commande suivante.
+</p>
+
+<p class="cli">dism /Apply-Image /ImageFile:E:\sources\install.wim /Index:1 /ApplyDir:G:\</p>
+
+<ul>
+	<li>Apply-Image : Opération à effectuer, ici appliquer l'image.</li>
+	<li>ImageFile : Chemin de l'image à appliquer.</li>
+	<li>Index : Ce paramètre est l'index correspondant à l'édition de Windows à appliquer.</li>
+	<li>ApplyDir : Répertoire sur lequel appliquer l'image. Sera souvent le répertoire racine d'une partition.</li>
+</ul>
+
+<img class="align" src="resources/install_windows-cmd_dism_apply_image_five.jpg">
+
+<br></br>
+
+<p align="justify">
+Attendre jusqu'à la fin du processus.
+</p>
+
+<img class="align" src="resources/install_windows-cmd_dism_apply_image_complete.jpg">
+
+<br></br>
+
+<p align="justify">
+Une fois l'image complètement écrite sur la partition dédiée au système, nous devons faire en sorte que ce soit amorçable. Pour ce faire, les données de l'EFI doivent être écrites sur la petite partition FAT32 que nous avons dédiée à cette fin sur le disque amovible.
+Un outil inclus avec Windows nommé <span class="cli">bcdboot</span> permet de «reconstruire» les fichiers de démarrage du système. Pour information, le chargeur d'amorçage («bootloader») de Windows se nomme <i>bcd</i>.
+</p>
+
+<p align="justify">
+La commande suivante permet de re-créer les fichiers sur la partition EFI <span class="cli">F:/</span> requis pour démarrer sur <span class="cli">G:/Windows</span> en mode UEFI. Entrez celle-ci avec les bonnes valeurs de paramètres selon votre environnement.
+</p>
+
+<p class="cli">[Chemin de l'exécutable bcdboot sur la partition système du disque amovible] [Chemin du répertoire Windows de la partition système du disque amovible] /f [Mode de démarrage] /s [Répertoire de destination des fichiers de démarrage]</p>
+
+<img class="align" src="resources/install_windows-bcdboot_write_efi_data.jpg">
+
+<br></br>
+
+<p align="justify">
+Une fois les fichiers de démarrage écrits, votre environnement d'installation devrait ressembler à ceci.
+</p>
+
+<img class="align" src="resources/install_windows-explorer_disks_partitions.jpg">
+
+<br></br>
+
+<p align="justify">
+Note : Ici le démarrage sur VHD est utilisé, le <i>bcd</i> de Windows le gère sans problèmes.
+</p>
+
+<p align="justify">
+Il nous reste seulement à marquer la partition «EFI» comme étant de type <span class="cli">EFI</span> afin qu'elle soit reconnu comme tel par l'UEFI (le chargeur d'amorçage parent). De plus, elle deviendra cachée dans l'explorateur Windows et donc nous ne l'aurons plus dans les pattes.
+</p>
+
+<p align="justify">
+Toujours en invite de commande, retourner dans l'utilitaire <span class="cli">diskpart</span> et obtenir la liste des disques comme on a fait dans la deuxième partie de ce guide.
+</p>
+
+<p class="cli">list disk</p>
+
+<img class="align" src="resources/install_windows-cmd_diskpart_list_disk.jpg">
+
+<br></br>
+
+<p align="justify">
+Faire attention pour ne pas faire erreur, car vous allez aussi voir le disque correspondant au VHD dans cette liste. Ici, nous voulons choisir la partition «EFI» du disque amovible (disque physique et non le VHD).
+Pour l'installation efectuée dans ce guide, cela correspond au <span class="cli">Disque 1</span> de la liste ci-dessus. Il est possible de confirmer cela en regardant dans le gestionnaire de disques Windows le numéro du disque sur lequel nous avons crée les deux partitions précédemment.
+</p>
+
+<p align="justify">
+Sélectionner le disque correspondant à la carte SD, ici c'est l'ID <span class="cli">Disque 1</span> (faire attention à en être bien certain).
+</p>
+
+<p class="cli">select disk [ID]</p>
+
+<img class="align" src="resources/install_windows-cmd_diskpart_select_disk_1.jpg">
+
+<br></br>
+
+<p align="justify">
+Sélectionner ensuite la partition «EFI», on reconnait celle-ci par sa petite taille de 128 Mo. Ici c'est l'ID <span class="cli">Partition 1</span> qu'il faut donc choisir.
+</p>
+
+<p class="cli">select partition [ID]</p>
+
+<img class="align" src="resources/install_windows-cmd_diskpart_list_partition.jpg">
+
+<br></br>
+
+<p align="justify">
+Les actions suivantes seront donc effectuées sur la partition <span class="cli">1</span> du disque <span class="cli">1</span>, ce qui correspond à la partition nommée «EFI» du disque amovible. La prochaine étape consiste à définir l'identifiant GUID <span class="cli">EFI</span> sur cette dernière.
+</p>
+
+<p align="justify">
+Cet identifiant permet de marquer la partition comme <span class="cli">EFI</span> et donc reconnue comme amorçable par l'UEFI. De plus, Windows la reconnaîtra comme une partition système et la cachera de l'explorateur pour éviter d'y toucher par accident.
+</p>
+
+<p align="justify">
+Pour trouver le GUID qui correspond au type <span class="cli">EFI</span>, afficher l'aide de la commande <span class="cli">set</span>.
+</p>
+
+<p class="cli">help set</p>
+
+<p align="justify">
+L'ID recherché se trouve dans l'encardé violet dans l'image ci-bas, celui-ci est <span class="cli">c12a7328-f81f-11d2-ba4b-00a0c93ec93b</span>.
+</p>
+
+<img class="align" src="resources/install_windows-cmd_diskpart_help_set.jpg">
+
+<br></br>
+
+<p align="justify">
+Note : C'est un identifiant qui reste toujours le même, définir celui-ci sur n'importe laquelle partition la définit comme <span class="cli">EFI</span>. Il y a également possibilité de re-définir la partition comme étant de base en utilisant l'ID «Partition de données de base», en dessus de celui de l'EFI.
+</p>
+
+<p align="justify">
+Utiliser la commande suivante afin que la partition soit définie comme étant de type <span class="cli">EFI</span>.
+</p>
+
+<p class="cli">set id=c12a7328-f81f-11d2-ba4b-00a0c93ec93b</p>
+
+<img class="align" src="resources/install_windows-cmd_diskpart_set_id.jpg">
+
+<br></br>
+
+<p align="justify">
+Si la commande se termine sans erreur, la partition «EFI» n'aura plus de lettre attribuée dans le gestionnaire de disque Windows et elle sera marquée comme «Partition du système EFI».
+</p>
+
+<img class="align" src="resources/install_windows-disk_manager_efi_set.jpg">
+
+<br></br>
+
+<p align="justify">
+L'installation est maintenant terminée, vous pouvez retirer le périphérique amovible et le brancher sur l'ordinateur qui sera utilisé avec. Le nouveau système <i>Windows 10 to Go</i> est prêt! Si l'installation a été effectuée sur disque virtuel (VHD), il faut détacher celui-ci avant de retirer le périphérique, sinon il sera toujours en utilisation et risque d'être corrompu.
+</p>
+
+<img class="align" src="resources/install_windows-disk_manager_detach_vhd.jpg">
+
+<br></br>
+
+
+<p align="justify">
+Fort probable qu'il faudra changer la séquence d'amorçage de l'UEFI pour démarrer sur le périphérique amovible. Le premier démarrage prend toujours un peu de temps, car Windows doit préparer les pilotes et compléter son installation. Une fois ceci fait, l'assistant de configuration de Windows 10 s'exécutera et il suffira de suivre les instructions pour arriver sur le bureau.
+</p>
+
+<br></br>
+
+</div>
+
+<footer>
+	Copyright © 2022 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>

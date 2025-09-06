@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="fr-CA">
+<head>
+
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" type="text/css" href="../common/general.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1">
+
+<title>Installation de Windows sur un disque amovible - Télécharger l'image disque Windows</title>
+
+</head>
+
+<body>
+
+<div class="main">
+
+<h1>Télécharger l'image disque Windows</h1>
+
+<p align="justify">
+Comme tout installation standard de Windows, il nous faut un média d'installation soit physique ou virtuel (ISO).
+	Le problème avec l'utilisation d'un média physique pour un système en «rolling release» c'est-à-dire en constante évolution comme Windows 10 c'est que il ne sera probablement pas à jour. Ce qui fait que les mise à jour post-installation peuvent devenir terriblement longues en plus de surcharger le nouveau système.
+	Microsoft offre de télécharger gratuitement l'image disque ISO du média d'installation pour ses systèmes Windows 8, 10 ainsi que 11 fort probablement pour la raison ci-haut.
+	Voici les liens de téléchargement officiels (site web de Microsoft) des différentes version de Windows.
+	<ul>
+		<li>Windows 8 : <a href="https://www.microsoft.com/fr-ca/software-download/windows8ISO">https://www.microsoft.com/fr-ca/software-download/windows8ISO</a></li>
+		<li>Windows 10 : <a href="https://www.microsoft.com/fr-ca/software-download/windows10">https://www.microsoft.com/fr-ca/software-download/windows10</a></li>
+		<li>Windows 11 : <a href="https://www.microsoft.com/fr-ca/software-download/windows11">https://www.microsoft.com/fr-ca/software-download/windows11</a></li>
+	</ul>
+</p>
+<p align="justify">
+Note : Pour Windows 10 ainsi que 11, seulement la dernière version est disponible au téléchargement.
+</p>
+
+<p align="justify">
+La procédure suivante d'installation de <i>Windows to Go</i> est fait avec Windows 10.
+</p>
+
+<p align="justify">
+Il faut donc aller télécharger l'image disque de Windows 10 à partir du site de Microsoft. Un moyen simple de se rendre au bon endroit est de passer par une recherche Google de «windows 10 iso».
+</p>
+
+<img class="align" src="resources/download_windows-google_win_iso_1.jpg">
+
+<br></br>
+
+<p align="justify">
+Généralement, c'est le premier résultat.
+</p>
+
+<img class="align" src="resources/download_windows-google_win_iso_2.jpg">
+
+<br></br>
+
+<p align="justify">
+Le lien sur lequel vous allez arriver dépendra du système d'exploitation à partir du quel vous accédez au site.
+	<ul>
+		<li>Système Windows 7 et plus récent : <a href="https://www.microsoft.com/fr-ca/software-download/windows10">https://www.microsoft.com/fr-ca/software-download/windows10</a></li>
+		<li>Linux, Mac OS et autres : <a href="https://www.microsoft.com/fr-ca/software-download/windows10ISO">https://www.microsoft.com/fr-ca/software-download/windows10ISO</a></li>
+	</ul>
+</p>
+
+<p align="justify">
+Si vous accédez aux liens ci-haut à partir d'un ordinateur avec Windows, la page vous proposera plutôt d'utiliser l'outil de mise à niveau Windows au lieu de l'image disque ISO. Cependant, il existe un petit truc sympa pour pouvoir quand même télécharger l'image disque sans devoir démarrer un autre système.
+</p>
+
+<p align="justify">
+Ouvrez l'outil de développement web du navigateur Microsoft Edge.
+</p>
+
+<img class="align" src="resources/download_windows-edge_dev_tool_select.jpg">
+
+<br></br>
+
+<p align="justify">
+Dans le menu des trois petits points en haut à droite, choisir "Émulation d'appareil".
+</p>
+
+<img class="align" src="resources/download_windows-edge_dev_tool_emulation_select.jpg">
+
+<br></br>
+
+<p align="justify">
+Choisir "Tablette - 768px" en cliquant sur le rectangle gris le plus à droite.
+</p>
+
+<img class="align" src="resources/download_windows-edge_dev_tool_emulation_tablet.jpg">
+
+<br></br>
+
+<p align="justify">
+Rafraîchir la page, et voilà! Vous arrivez directement sur la page de téléchargement de l'image disque de Windows 10.
+</p>
+
+<img class="align" src="resources/download_windows-iso_page_tablet_mode.jpg">
+
+<br></br>
+
+<p align="justify">
+Sélectionner l'édition de Windows 10 désirée. Généralement, il y aura un seul choix qui correspond à une image ISO comportant tous les éditions de Windows 10 (famille, professionel, éducation et autres).
+</p>
+
+<img class="align" src="resources/download_windows-select_edition.jpg">
+
+<br></br>
+
+<p align="justify">
+Choisir ensuite la langue du produit, ici je choisis Français Canadien. Puis, cliquer sur le bouton «Confirmer».
+</p>
+
+<img class="align" src="resources/download_windows-select_language.jpg">
+
+<br></br>
+
+<p align="justify">
+Vous pouvez alors choisir entre la version 32-bit ou 64-bit du système d'exploitation en cliquant sur le bouton correspondant, puis le téléchargement va démarrer (un peu plus de 5 Go).
+</p>
+
+<img class="align" src="resources/download_windows-download_iso.jpg">
+
+<br></br>
+
+<p align="justify">
+Une fois le téléchargement terminé, il est important de vérifier l'intégrité du fichier image téléchargé pour s'assurer qu'il ne se soit pas corrompu lors du transfert entre les serveurs de Microsoft et votre ordinateur.
+</p>
+
+<p align="justify">
+Les instructions pour effectuer la somme de contrôle (hashage) du fichier ISO sont fournies en bas des boutons de téléchargement.
+</p>
+
+<img class="align" src="resources/download_windows-hash_instructions.jpg">
+
+<br></br>
+
+<p align="justify">
+Plus bas, vous aurez aussi le résultat attendu en SHA-256 pour chacune des versions 32-bit et 64-bit ainsi que dans toutes les langues supportées. Nous allons considérer Français Canadien en 64-bit.
+</p>
+
+<img class="align" src="resources/download_windows-hashes.jpg">
+
+<br></br>
+
+<p align="justify">
+Ouvrir l'interpréteur de commandes Windows PowerShell, puis entrer la commande suivante.
+</p>
+
+<p class="cli">PS > Get-FileHash [Chemin du fichier image .iso]</p>
+
+<img class="align" src="resources/download_windows-powershell_get_file_hash.jpg">
+
+<br></br>
+
+<p align="justify">
+Attendre le résultat, puis le comparer avec la valeur dans tableau suivant correspondant au fichier .iso téléchargé.
+</p>
+
+<img class="align" src="resources/download_windows-hashes.jpg">
+
+<p align="justify">
+Le résultat en sortie de la commande Get-FileHash ainsi que la valeur du tableau doit être parfaitement identique. Si les deux valeurs sont différentes, le fichier image .iso est corrompu et vous devez le télécharger de nouveau ou bien vérifier votre matériel (disque dur, RAM).
+</p>
+
+<br></br>
+
+<p align="justify">
+Windows 10 intègre une fonctionalité de lecteur virtuel qui permet de monter des fichiers image .iso tout comme s'ils étaient gravés sur un disque et mis dans un lecteur optique physique. Faire un clique-droit sur l'image .iso de Windows téléchargée, puis «Monter».
+</p>
+
+<img class="align" src="resources/download_windows-mount_iso.jpg">
+
+<br></br>
+
+<p align="justify">
+Un nouveau lecteur de DVD apparaîtra dans le poste de travail de l'ordinateur et aura une lettre d'attribuée tout comme un lecteur physique. Dans mon cas, c'est la lettre E:/ qui a été choisie par le système. Le contenu est exactement le même que si vous gravez le fichier .iso et que vous placez le média dans un lecteur optique physique sur votre ordinateur.
+</p>
+
+<img class="align" src="resources/download_windows-mounted_iso.jpg">
+
+<br></br>
+
+Tout est en place concernant les données requises, nous sommes prêts à préparer le support externe pour l'installation manuelle du système <i>Windows to Go</i>.
+
+<br></br>
+<center><a href="partition_removable_drive.html" class="menu"><b>> Partie 2:</b> Partitionner le disque amovible</a></center><br>
+</div>
+
+<footer>
+	Copyright © 2022 — Pierre-Marc Bonneau<br>
+	<a href="https://twitter.com/shadowlee19"><img src="../common/twitter.png" height=44 width=44></a>
+	<a href="https://github.com/pmbonneau"><img src="../common/github.png" height=44 width=44></a>
+	<a href="mailto:pmbonneau@pmbonneau.com"><img src="../common/mail.png" height=45 width=45></a>
+</footer>
+
+</body>
+</html>
